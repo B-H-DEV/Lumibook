@@ -1,0 +1,32 @@
+*.iml
+.gradle
+.kotlin
+/local.properties
+local.properties
+.env
+debug.keystore
+debug.keystore.base64
+my-upload-key.jks
+*.jks
+*.keystore
+
+# Build folders
+build/
+*/build/
+.build-outputs/
+*.apk
+*.aab
+.cxx/
+.externalNativeBuild/
+captures/
+
+# IDE
+.idea/
+*.iws
+*.ipr
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+

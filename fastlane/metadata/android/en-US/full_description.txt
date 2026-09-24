@@ -1,0 +1,16 @@
+Lumibook immerses you in the profound journey of the book "Les Luminautes — La Voie de Lumière", a philosophical and spiritual work crafted to inspire peace, mindfulness, and contemplation.
+
+This application provides a completely standalone reading and listening experience, free from ads, analytics, or internet dependencies.
+
+KEY FEATURES:
+
+• Complete Work: Read through all 61 chapters and pages of the official book within a fluid, beautifully typeset interface.
+• Meditative Soundscapes: Enhance your reading with custom ambient sound tracks (Opus format) featuring smooth cross-fading for unbroken tranquility.
+• Synchronized Audio Narration: Follow along with highlighted text synchronized to voice narration, or use your device's built-in text-to-speech engine.
+• PDF Export & Sharing: View or export the original printable PDF book "Les Luminautes — La Voie de Lumière" directly to your device or favorite PDF viewer.
+• Reading Comfort: Adjust typography size, switch between reading themes (Night, Dark Navy, Sepia, Light), and control playback speed.
+• 100% Offline: All content, ambient audio tracks, and documents are bundled into the app. Works without an internet connection or cellular service.
+• Zero Permissions: Requires no permissions whatsoever. No tracking, no analytics, no external network requests.
+
+Official website: https://luminautes.org
+Open source under the MIT License.
