@@ -92,8 +92,8 @@ fun ReaderPageView(
 ) {
     val readerColors = LocalReaderColors.current
 
-    // Auto-scroll logic: keeps highlighted text centered on screen
-    LaunchedEffect(activeHighlight.charStart, isAudioPlaying, autoScrollEnabled) {
+    // Auto-scroll logic: keeps highlighted paragraph centered on screen without re-triggering on every word
+    LaunchedEffect(activeHighlight.paragraphIndex, isAudioPlaying, autoScrollEnabled) {
         if (autoScrollEnabled && isAudioPlaying && activeHighlight.pageNumber == page.pageNumber) {
             val targetIndex = (activeHighlight.paragraphIndex + 1).coerceAtMost(page.paragraphs.size)
             if (targetIndex >= 0) {

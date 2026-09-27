@@ -4,9 +4,9 @@ This application provides a completely standalone reading and listening experien
 
 KEY FEATURES:
 
-• Complete Work: Read through all 61 chapters and pages of the official book within a fluid, beautifully typeset interface.
-• Meditative Soundscapes: Enhance your reading with custom ambient sound tracks (Opus format) featuring smooth cross-fading for unbroken tranquility.
-• Synchronized Audio Narration: Follow along with highlighted text synchronized to voice narration, or use your device's built-in text-to-speech engine.
+• Complete Work: Read through all 64 pages of the official book within a fluid, beautifully typeset interface.
+• Built-in Relax-Box: Procedural ambient sound generator and meditative visualizer (Tibetan singing bowls, rain, ocean waves, white/pink/brown noise, binaural beats, mandalas/aurora/plexus animations) running 100% offline via Web Audio.
+• Synchronized Audio Narration: Follow along with highlighted text synchronized word-by-word and paragraph-by-paragraph, using high-fidelity natural studio voices or your device's built-in TTS engine.
 • PDF Export & Sharing: View or export the original printable PDF book "Les Luminautes — La Voie de Lumière" directly to your device or favorite PDF viewer.
 • Reading Comfort: Adjust typography size, switch between reading themes (Night, Dark Navy, Sepia, Light), and control playback speed.
 • 100% Offline: All content, ambient audio tracks, and documents are bundled into the app. Works without an internet connection or cellular service.

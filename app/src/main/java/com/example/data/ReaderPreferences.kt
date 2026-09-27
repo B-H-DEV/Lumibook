@@ -20,7 +20,12 @@ class ReaderPreferences(context: Context) {
         private const val KEY_MUSIC_POS_MS = "key_music_pos_ms"
         private const val KEY_MUSIC_WAS_PLAYING = "key_music_was_playing"
         private const val KEY_MUSIC_VOLUME = "key_music_volume"
+        private const val KEY_RELAX_PRESET = "key_relax_preset"
     }
+
+    var relaxPreset: String
+        get() = prefs.getString(KEY_RELAX_PRESET, "global") ?: "global"
+        set(value) = prefs.edit().putString(KEY_RELAX_PRESET, value).apply()
 
     var viewedPage: Int
         get() = prefs.getInt(KEY_VIEWED_PAGE, 1)
@@ -51,7 +56,7 @@ class ReaderPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_MUSIC_WAS_PLAYING, value).apply()
 
     var musicVolume: Float
-        get() = prefs.getFloat(KEY_MUSIC_VOLUME, 0.55f)
+        get() = prefs.getFloat(KEY_MUSIC_VOLUME, 0.5f)
         set(value) = prefs.edit().putFloat(KEY_MUSIC_VOLUME, value).apply()
 
     fun saveFullState(

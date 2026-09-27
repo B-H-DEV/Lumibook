@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.TextDecrease
@@ -46,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.LocalReaderColors
@@ -88,34 +90,41 @@ fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Left: Logo and App Title
+                // Left: Logo and Book Title (Removed "Lumibook", now "Les Luminautes" and "La Voie de Lumière")
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { onOpenTableOfContents() }
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .clickable { onOpenTableOfContents() }
                 ) {
                     LumibookLogoBadge(size = 36.dp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "Lumibook",
+                            text = "Les Luminautes",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.5.sp,
+                            fontSize = 15.sp,
                             color = readerColors.textPrimary,
-                            fontFamily = FontFamily.Serif
+                            fontFamily = FontFamily.Serif,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "Les Luminautes",
-                            fontSize = 10.5.sp,
-                            color = readerColors.textSecondary
+                            text = "La Voie de Lumière",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = readerColors.accent,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                // Middle: Compact Original Printable PDF Download Button with margin
+                // Middle: Compact Original Printable PDF Download Button
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .padding(horizontal = 8.dp)
+                        .padding(horizontal = 4.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(readerColors.accent.copy(alpha = 0.12f))
                         .border(1.dp, readerColors.accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
@@ -131,7 +140,7 @@ fun ReaderTopBar(
                         tint = readerColors.accent,
                         modifier = Modifier.size(15.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = "PDF",
                         fontSize = 11.sp,
@@ -140,37 +149,36 @@ fun ReaderTopBar(
                     )
                 }
 
-                // Right: luminautes.org link chip & Actions
+                // Right: Compact luminautes.org web button (sphere/globe icon) & Actions
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // luminautes.org chip
-                    Box(
+                    // luminautes.org compact web button
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
+                            .padding(horizontal = 4.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(readerColors.surfaceVariant)
-                            .border(1.dp, readerColors.accent.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                            .border(1.dp, readerColors.accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                             .clickable {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://luminautes.org"))
                                 context.startActivity(intent)
                             }
-                            .padding(horizontal = 8.dp, vertical = 5.dp)
-                            .testTag("luminautes_org_button"),
-                        contentAlignment = Alignment.Center
+                            .padding(horizontal = 7.dp, vertical = 4.dp)
+                            .testTag("luminautes_org_button")
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "luminautes.org",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = readerColors.accent
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                contentDescription = "Ouvrir luminautes.org",
-                                tint = readerColors.accent,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Language,
+                            contentDescription = "Visiter le site luminautes.org",
+                            tint = readerColors.accent,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "Web",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = readerColors.accent
+                        )
                     }
 
                     Spacer(modifier = Modifier.width(4.dp))

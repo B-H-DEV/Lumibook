@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,12 +28,14 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SelfImprovement
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -81,6 +84,9 @@ fun PlayerControlBar(
     onMusicToggle: () -> Unit,
     musicVolume: Float,
     onMusicVolumeChange: (Float) -> Unit,
+    currentPreset: String = "sleep-deep",
+    onSelectPreset: (String) -> Unit = {},
+    onOpenRelaxBoxFull: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val readerColors = LocalReaderColors.current
@@ -198,36 +204,36 @@ fun PlayerControlBar(
                     }
                 }
 
-                // Right: Ambient Music Section Button & Expand Icon
+                // Right: Relax-Box Ambiance Controls & Expand Drawer
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.End
                 ) {
-                    // Meditative Music Pill
+                    // Relax-Box Toggle Pill
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
-                            .background(if (isMusicPlaying) readerColors.accent.copy(alpha = 0.2f) else readerColors.surfaceVariant)
+                            .background(if (isMusicPlaying) readerColors.accent.copy(alpha = 0.22f) else readerColors.surfaceVariant)
                             .border(
                                 1.dp,
-                                if (isMusicPlaying) readerColors.accent else readerColors.accent.copy(alpha = 0.3f),
+                                if (isMusicPlaying) readerColors.accent else readerColors.accent.copy(alpha = 0.35f),
                                 RoundedCornerShape(20.dp)
                             )
                             .clickable { onMusicToggle() }
-                            .padding(horizontal = 9.dp, vertical = 6.dp)
-                            .testTag("music_play_pause_button"),
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .testTag("relax_play_pause_button"),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = if (isMusicPlaying) Icons.Default.SelfImprovement else Icons.Default.MusicNote,
-                                contentDescription = "Musique méditative",
+                                imageVector = if (isMusicPlaying) Icons.Default.GraphicEq else Icons.Default.SelfImprovement,
+                                contentDescription = "Ambiance Relax-Box",
                                 tint = if (isMusicPlaying) readerColors.accent else readerColors.textSecondary,
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (isMusicPlaying) "Méditation" else "Ambiance",
+                                text = "Relax-Box",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (isMusicPlaying) readerColors.accent else readerColors.textPrimary,
@@ -236,7 +242,22 @@ fun PlayerControlBar(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+
+                    // Open Fullscreen Relax-Box button
+                    IconButton(
+                        onClick = onOpenRelaxBoxFull,
+                        modifier = Modifier.size(34.dp).testTag("relax_fullscreen_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fullscreen,
+                            contentDescription = "Afficher Relax-Box en grand",
+                            tint = readerColors.accent,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(2.dp))
 
                     // Expand / Collapse options button
                     IconButton(
@@ -245,7 +266,7 @@ fun PlayerControlBar(
                     ) {
                         Icon(
                             imageVector = if (isExpanded) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
-                            contentDescription = "Options audio & musique",
+                            contentDescription = "Options audio & presets",
                             tint = readerColors.textPrimary,
                             modifier = Modifier.size(20.dp)
                         )
@@ -351,20 +372,29 @@ fun PlayerControlBar(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Ambient Music Volume (Continuous cross-fade infinite playlist)
+                    // Relax-Box Section Header
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "Musique d'ambiance (boucle continue)",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = readerColors.accent
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                tint = readerColors.accent,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "Ambiance Relax-Box (Générateur sonore)",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = readerColors.accent
+                            )
+                        }
                         Text(
                             text = "${(musicVolume * 100).toInt()}%",
                             fontSize = 11.sp,
@@ -373,6 +403,9 @@ fun PlayerControlBar(
                         )
                     }
 
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Volume Slider
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -401,6 +434,95 @@ fun PlayerControlBar(
                             contentDescription = null,
                             tint = readerColors.textSecondary,
                             modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Auto Modes Quick Shortcuts Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Lecture automatique (Auto-Shuffle) :",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = readerColors.accent
+                        )
+                        Text(
+                            text = "Génératif",
+                            fontSize = 10.sp,
+                            color = readerColors.textSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            "global" to "Global",
+                            "sleep" to "Sleep",
+                            "focus" to "Focus",
+                            "zen" to "Zen"
+                        ).forEach { (modeKey, label) ->
+                            val isSelected = currentPreset.equals(modeKey, ignoreCase = true)
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected) readerColors.accent else readerColors.surface,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) readerColors.accent else readerColors.accent.copy(alpha = 0.35f)
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { onSelectPreset(modeKey) }
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) (if (readerColors.isDark) LumibookNavyDark else Color.White) else readerColors.textPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Prominent Button: Open full Relax-Box view
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(readerColors.accent.copy(alpha = 0.15f))
+                            .border(1.dp, readerColors.accent.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                            .clickable { onOpenRelaxBoxFull() }
+                            .padding(horizontal = 12.dp, vertical = 9.dp)
+                            .testTag("open_relaxbox_full_button"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = null,
+                            tint = readerColors.accent,
+                            modifier = Modifier.size(17.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Afficher la Relax-Box en plein écran",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = readerColors.accent
                         )
                     }
                 }

@@ -1,0 +1,1047 @@
+export class AudioEngine {
+    constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.compressor = null;
+        this.analyser = null;
+        this.soundNodes = {}; 
+        this.buffers = {};
+    }
+
+    async init() {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+
+        // Compresseur
+        this.compressor = this.ctx.createDynamicsCompressor();
+        this.compressor.threshold.value = -12;
+        this.compressor.ratio.value = 12;
+
+        // Master (initialisé à mi-hauteur 50%)
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = 0.5;
+
+        // --- BUS DE RÉVERBÉRATION ---
+        this.reverbNode = this.ctx.createConvolver();
+        this.reverbNode.buffer = this.createReverbBuffer(4.0, 2.5);
+
+        this.reverbGain = this.ctx.createGain();
+        this.reverbGain.gain.value = 0.5;
+
+        this.reverbNode.connect(this.reverbGain);
+        this.reverbGain.connect(this.compressor);
+
+        // --- FILTRE GLOBAL DOUX / CLAIR ---
+        this.toneFilter = this.ctx.createBiquadFilter();
+        this.toneFilter.type = 'lowpass';
+        this.toneFilter.frequency.value = 12000;
+
+        // 2ème filtre pour gérer le bas (high-pass subtil)
+        this.lofiLowFilter = this.ctx.createBiquadFilter();
+        this.lofiLowFilter.type = 'highpass';
+        this.lofiLowFilter.frequency.value = 20; // neutre ~ inaudible
+
+        // Chaîne : Comp -> Tone -> Master -> Analyser -> Destination
+        this.analyser = this.ctx.createAnalyser();
+        this.analyser.fftSize = 2048;
+
+        this.compressor.connect(this.toneFilter);
+        this.toneFilter.connect(this.lofiLowFilter);
+        this.lofiLowFilter.connect(this.masterGain);
+        this.masterGain.connect(this.analyser);
+        this.analyser.connect(this.ctx.destination);
+
+        // Buffers
+        this.buffers.white = this.createNoiseBuffer('white');
+        this.buffers.pink = this.createNoiseBuffer('pink');
+        this.buffers.brown = this.createNoiseBuffer('brown');
+
+        this.setLofiMode('off');
+        this.initSounds();
+
+        if (this.ctx.state === 'suspended') {
+            await this.ctx.resume();
+        }
+    }
+
+    setLofiMode(mode) {
+        if (!this.ctx || !this.toneFilter || !this.lofiLowFilter) return;
+
+        const now = this.ctx.currentTime;
+
+        if (mode === 'off') {
+            this.toneFilter.type = 'lowpass';
+            this.toneFilter.frequency.setTargetAtTime(12000, now, 0.2);
+            this.lofiLowFilter.type = 'highpass';
+            this.lofiLowFilter.frequency.setTargetAtTime(20, now, 0.2);
+        } else if (mode === 'soft') {
+            // un peu plus doux qu'avant
+            this.toneFilter.type = 'lowpass';
+            this.toneFilter.frequency.setTargetAtTime(7000, now, 0.2);
+
+            this.lofiLowFilter.type = 'highpass';
+            this.lofiLowFilter.frequency.setTargetAtTime(50, now, 0.2);
+        } else if (mode === 'deep') {
+            // “Let’s go deeper” : grosse couverture
+            this.toneFilter.type = 'lowpass';
+            this.toneFilter.frequency.setTargetAtTime(4000, now, 0.2);
+
+            this.lofiLowFilter.type = 'highpass';
+            this.lofiLowFilter.frequency.setTargetAtTime(80, now, 0.2);
+        }
+    }
+
+    setTone(val) {
+        if (!this.toneFilter) return;
+
+        // val entre 0 et 1
+        // 0   => low-pass très doux (1500 Hz)
+        // 0.5 => neutre (12000 Hz low-pass)
+        // 1   => high-pass pour éclaircir (300 Hz)
+        const now = this.ctx.currentTime;
+
+        if (val < 0.5) {
+            const t = val / 0.5; // 0 -> 1
+            const freq = 1500 + t * (12000 - 1500);
+            this.toneFilter.type = 'lowpass';
+            this.toneFilter.frequency.setTargetAtTime(freq, now, 0.1);
+        } else {
+            const t = (val - 0.5) / 0.5; // 0 -> 1
+            const freq = 50 + t * (300 - 50);
+            this.toneFilter.type = 'highpass';
+            this.toneFilter.frequency.setTargetAtTime(freq, now, 0.1);
+        }
+    }
+    createNoiseBuffer(type) {
+        const bufferSize = 4 * this.ctx.sampleRate;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const output = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            if(type === 'white') output[i] = white;
+            else if (type === 'pink') {
+                    var b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0; 
+                    b0 = 0.99886 * b0 + white * 0.0555179;
+                    b1 = 0.99332 * b1 + white * 0.0750759;
+                    b2 = 0.96900 * b2 + white * 0.1538520;
+                    b3 = 0.86650 * b3 + white * 0.3104856;
+                    b4 = 0.55000 * b4 + white * 0.5329522;
+                    b5 = -0.7616 * b5 - white * 0.0168980;
+                    output[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+                    output[i] *= 0.11; b6 = white * 0.115926;
+            } else if (type === 'brown') {
+                var lastOut = 0;
+                output[i] = (lastOut + (0.02 * white)) / 1.02;
+                lastOut = output[i];
+                output[i] *= 3.5; 
+            }
+        }
+        return buffer;
+    }
+
+    // Génère une réponse impulsionnelle synthétique (Impulse Response) pour la reverb
+    createReverbBuffer(duration, decay) {
+        const sampleRate = this.ctx.sampleRate;
+        const length = sampleRate * duration;
+        const impulse = this.ctx.createBuffer(2, length, sampleRate);
+        const left = impulse.getChannelData(0);
+        const right = impulse.getChannelData(1);
+
+        for (let i = 0; i < length; i++) {
+            // Enveloppe exponentielle décroissante
+            const n = duration - i / sampleRate;
+            const env = Math.pow(n / duration, decay);
+            // Bruit blanc multiplié par l'enveloppe
+            left[i] = (Math.random() * 2 - 1) * env;
+            right[i] = (Math.random() * 2 - 1) * env;
+        }
+        return impulse;
+    }
+
+    // Nouvelle méthode pour ajuster le niveau de la reverb
+    setReverbLevel(val) {
+        if (this.reverbGain) {
+            // Lissage pour éviter les "clics" sonores lors du changement
+            this.reverbGain.gain.setTargetAtTime(val, this.ctx.currentTime, 0.1);
+        }
+    }
+                
+    initSounds() {
+        this.createNoiseSource('rain', 'pink', 'lowpass', 800, false, 0.1, 0.6);
+        this.createBirds('birds');
+        this.createClock('clock'); 
+        this.createNoiseSource('waterfall', 'brown', 'lowpass', 600);
+        this.createNoiseSource('stream', 'white', 'highpass', 2000, false, 1, 0.05); 
+        this.createNoiseSource('ocean', 'pink', 'lowpass', 350, true, 0.05, 2.5); 
+        this.createNoiseSource('wind', 'pink', 'bandpass', 400, true, 0.15); 
+
+        this.createCricketsHigh('crickets'); 
+        this.createOwl('owl');
+        this.createPurrGrainy('purr');
+        this.createNoiseSource('fan', 'brown', 'lowpass', 400, true, 8.0, 3.5);
+        this.createCyberNight('night');
+        this.createVinylSource('vinyl');
+        this.createHeartbeat('heartbeat');
+
+        this.createPureSine('solfeggio', 528, 0.07); 
+        this.createPureSine('schumann', 50, 0.8); 
+        this.createDroneSource('alpha', 100, 108); 
+        this.createDroneSource('theta', 150, 155); 
+        this.createDroneSource('delta', 60, 62);   
+        this.createDroneSource('gamma', 200, 240); 
+        this.createPureSine('subbass', 45, 1.0);
+
+        this.createMelodyGenerator('bamboo', 'bamboo'); 
+        this.createMelodyGenerator('metal', 'metal');
+        this.createMelodyGenerator('handpan', 'handpan'); 
+        this.createMelodyGenerator('kalimba', 'kalimba'); 
+        this.createMelodyGenerator('bells', 'bells');
+        this.createMelodyGenerator('panflute', 'panflute'); 
+        this.createMelodyGenerator('harp', 'harp'); 
+
+        this.createChoir('choir');
+        this.createStrings('strings');
+        this.createIceTexture('ice');
+        this.createCrystalDrops('crystal'); 
+        this.createPadSource('space');
+        this.createSingingBowl('bowl_mid', 220); 
+        this.createMagneticField('magnetic'); 
+    }
+
+    createClock(id) {
+        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        this.soundNodes[id] = master; master.connect(this.compressor);
+        const tick = () => {
+            const nextTime = 2000; setTimeout(tick, nextTime);
+            if (master.userVolume > 0.001) {
+                try {
+                    const t = this.ctx.currentTime;
+                    const noise = this.ctx.createBufferSource(); noise.buffer = this.buffers['white'];
+                    const filter = this.ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 800; filter.Q.value = 2;
+                    const g = this.ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1, t+0.005); g.gain.exponentialRampToValueAtTime(0.001, t+0.05);
+                    noise.connect(filter); filter.connect(g); g.connect(master); noise.start(t); noise.stop(t+0.1);
+                    
+                    const t2 = t + 1.0;
+                    const noise2 = this.ctx.createBufferSource(); noise2.buffer = this.buffers['white'];
+                    const filter2 = this.ctx.createBiquadFilter(); filter2.type = 'bandpass'; filter2.frequency.value = 600; filter2.Q.value = 2;
+                    const g2 = this.ctx.createGain(); g2.gain.setValueAtTime(0, t2); g2.gain.linearRampToValueAtTime(0.8, t2+0.005); g2.gain.exponentialRampToValueAtTime(0.001, t2+0.05);
+                    noise2.connect(filter2); filter2.connect(g2); g2.connect(master); noise2.start(t2); noise2.stop(t2+0.1);
+                } catch(e) {}
+            }
+        };
+        tick();
+    }
+
+    createBirds(id) {
+        const master = this.ctx.createGain(); 
+        master.gain.value = 0; 
+        master.userVolume = 0;
+        this.soundNodes[id] = master; 
+        
+        // NOUVEAU : Création du Panner
+        const panner = this.ctx.createStereoPanner();
+        panner.pan.value = 0; // Au centre par défaut
+        
+        // Routage : Master -> Panner -> Compressor (et Reverb)
+        master.connect(panner);
+        panner.connect(this.compressor);
+
+        // Envoi Reverb (si vous l'aviez mis)
+        const reverbSend = this.ctx.createGain();
+        reverbSend.gain.value = 0.5;
+        panner.connect(reverbSend);
+        reverbSend.connect(this.reverbNode);
+
+        const chirp = () => {
+            setTimeout(chirp, Math.random() * 2000 + 800);
+            if (master.userVolume > 0.001) {
+                try {
+                    const t = this.ctx.currentTime;
+                    
+                    // NOUVEAU : Position aléatoire (entre -1 (Gauche) et 1 (Droite))
+                    // On utilise setValueAtTime pour ne pas que le son saute brutalement
+                    const newPan = (Math.random() * 2) - 1;
+                    panner.pan.setTargetAtTime(newPan, t, 0.1);
+
+                    const osc = this.ctx.createOscillator(); osc.type = 'sine';
+                    const startFreq = 2000 + Math.random() * 1000;
+                    osc.frequency.setValueAtTime(startFreq, t); 
+                    osc.frequency.exponentialRampToValueAtTime(startFreq/2, t + 0.1);
+                    
+                    const g = this.ctx.createGain(); 
+                    g.gain.setValueAtTime(0, t); 
+                    g.gain.linearRampToValueAtTime(0.6, t + 0.01); 
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+                    
+                    osc.connect(g); 
+                    g.connect(master); 
+                    osc.start(t); 
+                    osc.stop(t + 0.15);
+                } catch(e) {}
+            }
+        };
+        chirp();
+    }
+
+
+    createOwl(id) {
+        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        this.soundNodes[id] = master; 
+        // NOUVEAU : Création du Panner
+        const panner = this.ctx.createStereoPanner();
+        panner.pan.value = 0; // Au centre par défaut
+        
+        // Routage : Master -> Panner -> Compressor (et Reverb)
+        master.connect(panner);
+        panner.connect(this.compressor);
+        // On limite l'envoi reverb à 50%
+        const reverbSend = this.ctx.createGain();
+        reverbSend.gain.value = 0.50; 
+        master.connect(reverbSend);
+        reverbSend.connect(this.reverbNode);
+        const hoot = () => {
+            setTimeout(hoot, Math.random() * 4000 + 2000);
+            if (master.userVolume > 0.001) {
+                try {
+                    const t = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator(); osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400, t); osc.frequency.linearRampToValueAtTime(300, t + 0.4);
+                    const g = this.ctx.createGain();
+                    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.25, t + 0.1); g.gain.linearRampToValueAtTime(0.1, t + 0.2); 
+                    g.gain.linearRampToValueAtTime(0.25, t + 0.3); g.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+                    osc.connect(g); g.connect(master); osc.start(t); osc.stop(t + 1);
+                } catch(e) {}
+            }
+        };
+        hoot();
+    }
+
+    createHeartbeat(id) {
+        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        this.soundNodes[id] = master; master.connect(this.compressor);
+        const beat = () => {
+            setTimeout(beat, 1500);
+            if(master.userVolume > 0.001) {
+                try {
+                    const t = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator(); osc.frequency.setValueAtTime(60, t); osc.frequency.exponentialRampToValueAtTime(30, t + 0.1);
+                    const g = this.ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1.5, t + 0.05); g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+                    osc.connect(g); g.connect(master); osc.start(t); osc.stop(t + 0.5);
+                    
+                    const t2 = t + 0.3;
+                    const osc2 = this.ctx.createOscillator(); osc2.frequency.setValueAtTime(50, t2); osc2.frequency.exponentialRampToValueAtTime(25, t2 + 0.15);
+                    const g2 = this.ctx.createGain(); g2.gain.setValueAtTime(0, t2); g2.gain.linearRampToValueAtTime(1.0, t2 + 0.05); g2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.5);
+                    osc2.connect(g2); g2.connect(master); osc2.start(t2); osc2.stop(t2 + 0.6);
+                } catch(e) {}
+            }
+        };
+        beat();
+    }
+
+    createVinylSource(id) {
+        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        const hiss = this.ctx.createBufferSource(); hiss.buffer = this.buffers['pink']; hiss.loop = true;
+        const hissFilter = this.ctx.createBiquadFilter(); hissFilter.type = 'highpass'; hissFilter.frequency.value = 3000;
+        const hissGain = this.ctx.createGain(); hissGain.gain.value = 0.05; 
+        hiss.connect(hissFilter); hissFilter.connect(hissGain); hissGain.connect(master); hiss.start();
+        this.soundNodes[id] = master; master.connect(this.compressor);
+        
+        const popLoop = () => {
+            setTimeout(popLoop, Math.random() * 80 + 20);
+            if(master.userVolume > 0.001) {
+                    if (Math.random() > 0.5) {
+                        const t = this.ctx.currentTime;
+                        const osc = this.ctx.createOscillator(); osc.type = 'triangle';
+                        const g = this.ctx.createGain();
+                        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.3, t + 0.001); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.005);
+                        osc.connect(g); g.connect(master); osc.start(t); osc.stop(t + 0.01);
+                    }
+            }
+        };
+        popLoop();
+    }
+
+    createCrystalDrops(id) {
+        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        this.soundNodes[id] = master; master.connect(this.compressor);
+        master.connect(this.reverbNode); // Envoie le son mélodique dans la reverb
+        const play = () => {
+            setTimeout(play, Math.random() * 1000 + 500);
+            if(master.userVolume > 0.001) {
+                try {
+                    const t = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator(); osc.frequency.value = 1500 + Math.random() * 2000; osc.type = 'sine';
+                    const g = this.ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.1, t + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+                    osc.connect(g); g.connect(master); osc.start(t); osc.stop(t + 0.9);
+                } catch(e) {}
+            }
+        };
+        play();
+    }
+
+    createCyberNight(id) {
+        const master = this.ctx.createGain();
+        master.gain.value = 0;
+        master.userVolume = 0;
+        this.soundNodes[id] = master;
+
+        // Compresseur + très peu de reverb pour l'effet "collé au composant"
+        master.connect(this.compressor);
+        const reverbSend = this.ctx.createGain();
+        reverbSend.gain.value = 0.15; // Reverb encore diminuée pour un son bien "sec"
+        master.connect(reverbSend);
+        reverbSend.connect(this.reverbNode);
+
+        // 1. LE SOUFFLE DE CONNECTION (bruit blanc hyper filtré)
+        const dataHiss = this.ctx.createBufferSource();
+        dataHiss.buffer = this.buffers['white'];
+        dataHiss.loop = true;
+        
+        // Filtre passe-haut extrême pour ne garder que le grésillement numérique
+        const hissFilter = this.ctx.createBiquadFilter();
+        hissFilter.type = 'highpass';
+        hissFilter.frequency.value = 12000; 
+
+        const hissGain = this.ctx.createGain();
+        hissGain.gain.value = 0.2; // Volume de base du grésillement
+
+        dataHiss.connect(hissFilter);
+        hissFilter.connect(hissGain);
+        hissGain.connect(master);
+        dataHiss.start();
+
+        // 2. LE GRINCEMENT DE DATA (Le fameux bruit de modem)
+        const playDataBurst = () => {
+            // Rafales de données très rapprochées (entre 0.1s et 1.5s)
+            setTimeout(playDataBurst, Math.random() * 1400 + 100);
+
+            if (master.userVolume > 0.001) {
+                try {
+                    let t = this.ctx.currentTime;
+                    
+                    // Fréquences très hautes (entre 4000Hz et 8000Hz) pour éviter l'effet oiseau
+                    const baseFreq = 4000 + Math.random() * 4000; 
+
+                    // On crée le "crépitement" avec une onde "sawtooth" ou "square" uniquement (très agressif/numérique)
+                    const osc = this.ctx.createOscillator();
+                    osc.type = Math.random() > 0.5 ? 'square' : 'sawtooth';
+                    
+                    // On simule le changement de fréquence ultra rapide (les "étages" de connexion d'un modem)
+                    osc.frequency.setValueAtTime(baseFreq, t);
+                    if(Math.random() > 0.5) {
+                        // Saute vers une autre fréquence stridente en plein milieu
+                        osc.frequency.setValueAtTime(baseFreq * 1.5, t + 0.03);
+                    }
+
+                    // Pour hacher le son façon "arc électrique" / "Data"
+                    const mod = this.ctx.createOscillator();
+                    mod.type = 'square';
+                    mod.frequency.value = 40 + Math.random() * 60; // Hachage ultra rapide (40 à 100Hz)
+                    const modGain = this.ctx.createGain();
+                    modGain.gain.value = baseFreq / 2;
+                    
+                    mod.connect(modGain);
+                    modGain.connect(osc.frequency);
+
+                    const g = this.ctx.createGain();
+                    // Enveloppe ultra courte et "carrée" (pas de fondu pour faire bien digital)
+                    g.gain.setValueAtTime(0, t);
+                    g.gain.setValueAtTime(0.08, t + 0.001); // Attaque instantanée
+                    g.gain.setValueAtTime(0, t + (Math.random() * 0.08 + 0.02)); // Coupe nette
+
+                    // Spatialisation chaotique (les données sautent de gauche à droite)
+                    const panner = this.ctx.createStereoPanner();
+                    panner.pan.value = (Math.random() * 2) - 1;
+
+                    osc.connect(g);
+                    g.connect(panner);
+                    panner.connect(master);
+
+                    osc.start(t);
+                    mod.start(t);
+                    osc.stop(t + 0.15);
+                    mod.stop(t + 0.15);
+
+                } catch(e) {}
+            }
+        };
+
+        // On lance deux boucles décalées pour avoir un flot de données chaotique
+        playDataBurst();
+        setTimeout(playDataBurst, 500);
+    }
+
+    createMelodyGenerator(id, instrumentType) {
+        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        this.soundNodes[id] = master; 
+        
+        // Routage vers Compressor ET Reverb
+        master.connect(this.compressor);
+        master.connect(this.reverbNode);
+
+        // Gamme Pentatonique (très relaxante)
+        const scale = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25];
+        
+        // NOUVEAU : On garde en mémoire la dernière note jouée (index)
+        let currentNoteIndex = Math.floor(scale.length / 2);
+
+        const playNote = () => {
+            let nextTime = 0;
+            if(instrumentType === 'bells' || instrumentType === 'kalimba') nextTime = Math.random() * 500 + 200;
+            else if (instrumentType === 'metal') nextTime = Math.random() * 3000 + 2000;
+            else nextTime = Math.random() * 1500 + 500;
+            
+            setTimeout(playNote, nextTime);
+
+            if (master.userVolume > 0.001) {
+                try {
+                    // NOUVEAU : Marche aléatoire (Random Walk)
+                    // Au lieu de prendre n'importe quelle note, on monte d'une note, on descend d'une note, ou on reste sur place.
+                    const step = Math.floor(Math.random() * 3) - 1; // Donne -1, 0 ou +1
+                    currentNoteIndex += step;
+                    
+                    // On s'assure de ne pas sortir du tableau
+                    if (currentNoteIndex < 0) currentNoteIndex = 1;
+                    if (currentNoteIndex >= scale.length) currentNoteIndex = scale.length - 2;
+
+                    const freq = scale[currentNoteIndex];
+                    const t = this.ctx.currentTime;
+                    
+                    // NOUVEAU : Spatialisation subtile des notes
+                    const notePanner = this.ctx.createStereoPanner();
+                    notePanner.pan.value = (Math.random() * 0.8) - 0.4; // Léger pan gauche/droite
+                    notePanner.connect(master);
+                    
+                    if (instrumentType === 'bamboo') {
+                        // "WOOD": Octave down (freq * 0.5)
+                        const osc1 = this.ctx.createOscillator(); osc1.type = 'sine'; osc1.frequency.value = freq * 0.5;
+                        const osc2 = this.ctx.createOscillator(); osc2.type = 'sine'; osc2.frequency.value = (freq * 0.5) * 2.6; 
+                        const g = this.ctx.createGain();
+                        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.6, t+0.01); g.gain.exponentialRampToValueAtTime(0.001, t+0.4); 
+                        osc1.connect(g); osc2.connect(g); g.connect(notePanner);
+                        osc1.start(t); osc1.stop(t+0.5); osc2.start(t); osc2.stop(t+0.5);
+
+                        const noise = this.ctx.createBufferSource(); noise.buffer = this.buffers['white'];
+                        const nFilter = this.ctx.createBiquadFilter(); nFilter.type = 'highpass'; nFilter.frequency.value = 1000;
+                        const nGain = this.ctx.createGain(); nGain.gain.setValueAtTime(0, t); nGain.linearRampToValueAtTime(0.4, t+0.005); nGain.exponentialRampToValueAtTime(0.001, t+0.05);
+                        noise.connect(nFilter); nFilter.connect(nGain); nGain.connect(master);
+                        noise.start(t); noise.stop(t+0.1);
+                    } 
+                    else if (instrumentType === 'metal') {
+                        const carrier = this.ctx.createOscillator(); carrier.frequency.value = freq;
+                        const mod = this.ctx.createOscillator(); mod.frequency.value = freq * 2.4; 
+                        const modG = this.ctx.createGain(); modG.gain.value = 225;
+                        const g = this.ctx.createGain();
+                        mod.connect(modG); modG.connect(carrier.frequency);
+                        carrier.connect(g); g.connect(notePanner);
+                        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.3, t + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + 3.0); 
+                        carrier.start(t); mod.start(t); carrier.stop(t+3.1); mod.stop(t+3.1);
+                    }
+                    else if (instrumentType === 'handpan') {
+                        const g = this.ctx.createGain();
+                        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.35, t + 0.03); g.gain.exponentialRampToValueAtTime(0.001, t + 3.0); 
+                        const osc1 = this.ctx.createOscillator(); osc1.type = 'sine'; osc1.frequency.value = freq;
+                        const osc2 = this.ctx.createOscillator(); osc2.type = 'sine'; osc2.frequency.value = freq * 2;
+                        const osc3 = this.ctx.createOscillator(); osc3.type = 'sine'; osc3.frequency.value = freq * 3; 
+                        const g1 = this.ctx.createGain(); g1.gain.value = 1.0;
+                        const g2 = this.ctx.createGain(); g2.gain.value = 0.5;
+                        const g3 = this.ctx.createGain(); g3.gain.value = 0.25;
+                        osc1.connect(g1); g1.connect(g); osc2.connect(g2); g2.connect(g); osc3.connect(g3); g3.connect(g);
+                        g.connect(notePanner);
+                        osc1.start(t); osc2.start(t); osc3.start(t);
+                        osc1.stop(t+3.1); osc2.stop(t+3.1); osc3.stop(t+3.1);
+                    }
+                    else if (instrumentType === 'kalimba') {
+                        const osc = this.ctx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(freq, t);
+                        const g = this.ctx.createGain();
+                        const click = this.ctx.createOscillator(); click.type = 'square'; click.frequency.value = 100; 
+                        const clickG = this.ctx.createGain(); clickG.gain.setValueAtTime(0.05, t); clickG.gain.exponentialRampToValueAtTime(0.0001, t+0.02);
+                        click.connect(clickG); clickG.connect(master); click.start(t); click.stop(t+0.03);
+                        osc.connect(g); g.connect(notePanner);
+                        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.4, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + 1.5); 
+                        osc.start(t); osc.stop(t+1.6);
+                    }
+                    else if (instrumentType === 'bells') {
+                        const osc = this.ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq * 4; 
+                        const g = this.ctx.createGain();
+                        osc.connect(g); g.connect(notePanner);
+                        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.1, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + 1.0);
+                        osc.start(t); osc.stop(t+1.1);
+                    }
+                    else if (instrumentType === 'panflute') {
+                        // FIXED: Pure sound, low noise.
+                        const pitch = freq / 2; 
+                        const osc = this.ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.value = pitch;
+                        
+                        const vib = this.ctx.createOscillator(); vib.frequency.value = 5; 
+                        const vibG = this.ctx.createGain(); vibG.gain.value = 6; // Deep vibrato
+                        vib.connect(vibG); vibG.connect(osc.frequency); vib.start(t); vib.stop(t+2.5);
+
+                        // Subtle Chiff
+                        const noise = this.ctx.createBufferSource(); noise.buffer = this.buffers['white'];
+                        const nFilter = this.ctx.createBiquadFilter(); nFilter.type = 'bandpass'; nFilter.frequency.value = pitch * 3; nFilter.Q.value = 5; 
+                        const g = this.ctx.createGain();
+                        const noiseG = this.ctx.createGain(); noiseG.gain.value = 0.4; // Reduced
+                        const toneG = this.ctx.createGain(); toneG.gain.value = 0.6; 
+                        
+                        // Lowpass tone
+                        const toneFilter = this.ctx.createBiquadFilter(); toneFilter.type = 'lowpass'; toneFilter.frequency.value = pitch * 1.5;
+                        osc.connect(toneFilter); toneFilter.connect(toneG); toneG.connect(g);
+                        noise.connect(nFilter); nFilter.connect(noiseG); noiseG.connect(g);
+                        g.connect(notePanner);
+                        
+                        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.6, t + 0.4); 
+                        g.gain.linearRampToValueAtTime(0.4, t + 1.0); g.gain.linearRampToValueAtTime(0, t + 2.5);   
+                        osc.start(t); noise.start(t); osc.stop(t+2.6); noise.stop(t+2.6);
+                    }
+                    else if (instrumentType === 'harp') {
+                        const delay = Math.random() * 0.1;
+                        const start = t + delay;
+                        const g = this.ctx.createGain();
+                        g.gain.setValueAtTime(0, start); g.gain.linearRampToValueAtTime(0.3, start + 0.1); g.gain.exponentialRampToValueAtTime(0.001, start + 3.0); 
+                        const osc1 = this.ctx.createOscillator(); osc1.type = 'triangle'; osc1.frequency.value = freq;
+                        const osc2 = this.ctx.createOscillator(); osc2.type = 'sine'; osc2.frequency.value = freq * 1.002; 
+                        const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = freq * 2;
+                        osc1.connect(lp); lp.connect(g); osc2.connect(g); g.connect(notePanner);
+                        osc1.start(start); osc2.start(start); osc1.stop(start+3.1); osc2.stop(start+3.1);
+                    }
+                } catch(e) {}
+            }
+        };
+        playNote();
+    }
+
+    createMagneticField(id) {
+        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        this.soundNodes[id] = master; master.connect(this.compressor);
+        master.connect(this.reverbNode);
+        const osc = this.ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 60;
+        const osc2 = this.ctx.createOscillator(); osc2.type = 'triangle'; osc2.frequency.value = 60.5;
+        const lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.1;
+        const lfoG = this.ctx.createGain(); lfoG.gain.value = 100;
+        const filter = this.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 200;
+        lfo.connect(lfoG); lfoG.connect(filter.frequency);
+        osc.connect(filter); osc2.connect(filter); filter.connect(master);
+        osc.start(); osc2.start(); lfo.start();
+    }
+    createCricketsHigh(id) {
+        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        const src = this.ctx.createBufferSource(); src.buffer = this.buffers['white']; src.loop = true;
+        const filter = this.ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 5500; filter.Q.value = 8;
+        const tremolo = this.ctx.createOscillator(); tremolo.frequency.value = 30; tremolo.type = 'triangle';
+        const tremoloGain = this.ctx.createGain(); tremoloGain.gain.value = 0.5;
+        const modGain = this.ctx.createGain();
+        modGain.gain.value = 0.4; // <-- C'est ici que tu réduis le volume de base (par ex. à 40%)
+        src.connect(filter); filter.connect(modGain); modGain.connect(master);
+        tremolo.connect(tremoloGain); tremoloGain.connect(modGain.gain);
+        src.start(); tremolo.start();
+        this.soundNodes[id] = master; master.connect(this.compressor);
+        const reverbSend = this.ctx.createGain();
+        reverbSend.gain.value = 0.5;
+        master.connect(reverbSend);
+        reverbSend.connect(this.reverbNode);
+    }
+    createPurrGrainy(id) {
+        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        const src = this.ctx.createBufferSource(); src.buffer = this.buffers['pink']; src.loop = true;
+        const filter = this.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 250; 
+        const grainOsc = this.ctx.createOscillator(); grainOsc.type = 'sawtooth'; grainOsc.frequency.value = 26; 
+        const grainFilter = this.ctx.createBiquadFilter(); grainFilter.type = 'lowpass'; grainFilter.frequency.value = 100; 
+        const grainGain = this.ctx.createGain(); grainGain.gain.value = 0.4; 
+        src.connect(filter); filter.connect(master);
+        grainOsc.connect(grainFilter); grainFilter.connect(grainGain); grainGain.connect(master);
+        const breathLfo = this.ctx.createOscillator(); breathLfo.frequency.value = 0.2; 
+        const breathLfoGain = this.ctx.createGain(); breathLfoGain.gain.value = 0.3; 
+        const swellingNode = this.ctx.createGain(); swellingNode.gain.value = 0.7;
+        master.disconnect(); master.connect(swellingNode); swellingNode.connect(this.compressor);
+        breathLfo.connect(breathLfoGain); breathLfoGain.connect(swellingNode.gain);
+        src.start(); grainOsc.start(); breathLfo.start();
+        this.soundNodes[id] = master;
+    }
+    createSingingBowl(id, freq) {
+        // Le gain contrôlé par l'utilisateur
+        const gain = this.ctx.createGain(); 
+        gain.gain.value = 0; 
+        gain.userVolume = 0;
+        
+        // NOUVEAU : Un réducteur global (On divise la puissance du bol par 4 pour l'intégrer au mix)
+        const masterReducer = this.ctx.createGain();
+        masterReducer.gain.value = 0.25; 
+        masterReducer.connect(gain);
+
+        // Les harmoniques : fondamentale (1), medium (2.7), aiguë (5.2)
+        const ratios = [1, 2.7, 5.2]; 
+        
+        ratios.forEach((r, index) => {
+            const osc = this.ctx.createOscillator(); 
+            osc.type = 'sine'; 
+            osc.frequency.value = freq * r; 
+            
+            // NOUVEAU : On gère le volume de chaque harmonique indépendamment
+            const oscGain = this.ctx.createGain();
+            
+            if (index === 0) {
+                oscGain.gain.value = 1.0;   // La note de base prend toute la place
+            } else if (index === 1) {
+                oscGain.gain.value = 0.3;   // La 1ère résonance est 3x moins forte
+            } else {
+                oscGain.gain.value = 0.1;   // Le petit tintement aigu est très discret
+            }
+            
+            osc.connect(oscGain);
+            oscGain.connect(masterReducer);
+            osc.start(); 
+        });
+        
+        gain.connect(this.compressor); 
+        this.soundNodes[id] = gain; 
+        gain.connect(this.reverbNode);
+    }
+    createNoiseSource(id, bufferType, filterType, freq, modulated=false, modSpeed=0.1, gainBoost=1.0) {
+        const src = this.ctx.createBufferSource(); 
+        src.buffer = this.buffers[bufferType]; 
+        src.loop = true;
+        
+        const filter = this.ctx.createBiquadFilter(); 
+        filter.type = filterType; 
+        filter.frequency.value = freq;
+        if(filterType === 'bandpass') filter.Q.value = 0.5;
+        
+        const preGain = this.ctx.createGain(); preGain.gain.value = gainBoost;
+        const gain = this.ctx.createGain(); gain.gain.value = 0; gain.userVolume = 0;
+        
+        // NOUVEAU : Spatialisation lente
+        const panner = this.ctx.createStereoPanner();
+        
+        // Routage
+        src.connect(filter); 
+        filter.connect(preGain); 
+        preGain.connect(gain); 
+        gain.connect(panner);
+        panner.connect(this.compressor); 
+
+        // NOUVEAU : Envoi subtil dans la reverb pour les sons d'ambiance de la pièce
+        if (id === 'fan' || id === 'clock') {
+            const reverbSend = this.ctx.createGain();
+            reverbSend.gain.value = 0.3; // 40% de reverb pour le fan et la clock
+            panner.connect(reverbSend);
+            reverbSend.connect(this.reverbNode);
+        }
+        // Si c'est du vent, l'océan, OU LE VENTILATEUR, on ajoute un mouvement 3D
+        if (id === 'wind' || id === 'ocean' || id === 'fan') {
+            const panLfo = this.ctx.createOscillator();
+            
+            // Le ventilo tourne plus vite que l'océan (ex: 0.15 = 1 cycle toutes les ~6.5 secondes)
+            panLfo.frequency.value = (id === 'fan') ? 0.10 : 0.05; 
+            
+            panLfo.connect(panner.pan);
+            panLfo.start();
+        }
+        // Le reste du code existant...
+        src.start();
+        if (modulated) {
+            const lfo = this.ctx.createOscillator(); lfo.frequency.value = modSpeed;
+            const lfoGain = this.ctx.createGain(); lfoGain.gain.value = freq * 0.3;
+            lfo.connect(lfoGain); lfoGain.connect(filter.frequency); lfo.start();
+        }
+        this.soundNodes[id] = gain;
+    }
+
+    createDroneSource(id, baseFreq, beatFreq) {
+        const gain = this.ctx.createGain(); 
+        gain.gain.value = 0; 
+        gain.userVolume = 0;
+        
+        // NOUVEAU : Création d'un "Splitter" (Séparateur stéréo)
+        const merger = this.ctx.createChannelMerger(2);
+
+        // Oscillateur GAUCHE (Fréquence de base)
+        const oscLeft = this.ctx.createOscillator(); 
+        oscLeft.type = 'sine'; // Le sinus est le plus pur pour les battements binauraux
+        oscLeft.frequency.value = baseFreq;
+        
+        // Oscillateur DROIT (Fréquence de base + différence)
+        const oscRight = this.ctx.createOscillator(); 
+        oscRight.type = 'sine';
+        oscRight.frequency.value = beatFreq;
+
+        // Connexion à gauche (canal 0) et à droite (canal 1)
+        oscLeft.connect(merger, 0, 0);
+        oscRight.connect(merger, 0, 1);
+
+        // Un filtre passe-bas doux pour que le son soit rond et agréable
+        const filter = this.ctx.createBiquadFilter(); 
+        filter.type = 'lowpass'; 
+        filter.frequency.value = 300;
+        
+        merger.connect(filter); 
+        filter.connect(gain); 
+        
+        // Les ondes binaurales ne doivent PAS aller dans la reverb, 
+        // sinon les phases se mélangent et l'effet cérébral est annulé.
+        gain.connect(this.compressor); 
+        
+        oscLeft.start(); 
+        oscRight.start();
+        
+        this.soundNodes[id] = gain;
+    }
+
+    // On ajoute maxVol avec une valeur par défaut de 1.0
+    createPureSine(id, freq, maxVol = 1.0) {
+        const osc = this.ctx.createOscillator(); 
+        osc.type = 'sine'; 
+        osc.frequency.value = freq;
+        
+        // Le reducer utilise maintenant le paramètre maxVol
+        const reducer = this.ctx.createGain();
+        reducer.gain.value = maxVol; 
+        
+        const gain = this.ctx.createGain(); 
+        gain.gain.value = 0; 
+        gain.userVolume = 0;
+        
+        osc.connect(reducer); 
+        reducer.connect(gain); 
+        
+        gain.connect(this.compressor);
+        gain.connect(this.reverbNode);
+        osc.start(); 
+        this.soundNodes[id] = gain;
+    }
+    createPadSource(id) {
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = 80;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.Q.value = 5;
+
+        // NOUVEAU : Réducteur de volume à la source
+        const padGain = this.ctx.createGain();
+        padGain.gain.value = 0.25; // On réduit drastiquement la puissance de base à 25%
+
+        const lfo = this.ctx.createOscillator();
+        lfo.frequency.value = 0.2;
+        const lfoGain = this.ctx.createGain();
+        lfoGain.gain.value = 300;
+
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0;
+        gain.userVolume = 0;
+
+        // ROUTAGE : osc -> filter -> padGain -> gain(master)
+        osc.connect(filter);
+        filter.connect(padGain); 
+        padGain.connect(gain);
+
+        gain.connect(this.compressor);
+        gain.connect(this.reverbNode);
+
+        lfo.connect(lfoGain);
+        lfoGain.connect(filter.frequency);
+
+        osc.start();
+        lfo.start();
+
+        this.soundNodes[id] = gain;
+    }
+    createChoir(id) {
+        const master = this.ctx.createGain();
+        master.gain.value = 0;
+        master.userVolume = 0;
+
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = 110;
+
+        const f1 = this.ctx.createBiquadFilter();
+        f1.type = 'bandpass';
+        f1.frequency.value = 350;
+        f1.Q.value = 4;
+
+        const f2 = this.ctx.createBiquadFilter();
+        f2.type = 'bandpass';
+        f2.frequency.value = 800;
+        f2.Q.value = 4;
+
+        const mix = this.ctx.createGain();
+        // MODIFICATION : Gain divisé par 2 (0.25 au lieu de 0.5)
+        mix.gain.value = 0.25; 
+
+        osc.connect(f1);
+        osc.connect(f2);
+        f1.connect(mix);
+        f2.connect(mix);
+        mix.connect(master);
+
+        const lfo = this.ctx.createOscillator();
+        lfo.frequency.value = 0.1;
+        const lfoG = this.ctx.createGain();
+        lfoG.gain.value = 2;
+
+        lfo.connect(lfoG);
+        lfoG.connect(osc.frequency);
+
+        osc.start();
+        lfo.start();
+
+        master.connect(this.compressor);
+        this.soundNodes[id] = master;
+        // Envoie le son mélodique dans la reverb
+        master.connect(this.reverbNode);
+    }
+    createStrings(id) {
+        const master = this.ctx.createGain();
+        master.gain.value = 0;
+        master.userVolume = 0;
+
+        // NOUVEAU : On ajoute un gain global très faible pour la piste entière
+        const padGain = this.ctx.createGain();
+        padGain.gain.value = 0.10; // Réduit le volume des violons de 85% à la source !
+
+        [220, 221, 329.6, 331].forEach(f => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sawtooth';
+            osc.frequency.value = f;
+            
+            const lp = this.ctx.createBiquadFilter();
+            lp.type = 'lowpass';
+            lp.frequency.value = 600;
+            
+            // On connecte au padGain plutôt qu'au master directement
+            osc.connect(lp);
+            lp.connect(padGain);
+            osc.start();
+        });
+
+        // Le padGain va ensuite dans le master
+        padGain.connect(master);
+
+        master.connect(this.compressor);
+        this.soundNodes[id] = master;
+
+        // Envoie le son mélodique dans la reverb
+        master.connect(this.reverbNode);
+    }
+    createIceTexture(id) {
+        const src = this.ctx.createBufferSource(); src.buffer = this.buffers['white']; src.loop = true;
+        const filter = this.ctx.createBiquadFilter(); filter.type = 'highpass'; filter.frequency.value = 6000; filter.Q.value = 5; 
+        const mod = this.ctx.createOscillator(); mod.frequency.value = 0.2;
+        const modG = this.ctx.createGain(); modG.gain.value = 2000;
+        // NOUVEAU : On ajoute un réducteur de gain à 20%
+        const reducer = this.ctx.createGain();
+        reducer.gain.value = 0.15; 
+        
+        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        
+        // Le filtre passe d'abord par le réducteur avant d'aller dans le master
+        src.connect(filter); 
+        filter.connect(reducer); 
+        reducer.connect(master);
+        
+        src.start(); mod.start();
+        master.connect(this.compressor); this.soundNodes[id] = master;
+        master.connect(this.reverbNode);
+    }
+    setVolume(id, val) {
+        if(this.soundNodes[id]) {
+            this.soundNodes[id].gain.setTargetAtTime(val, this.ctx.currentTime, 0.2);
+            this.soundNodes[id].userVolume = val;
+        }
+    }
+
+    // --- BREATHING GUIDE ---
+    
+    startBreathingGuide() {
+        if (this.breathingOsc) return;
+        
+        this.breathingGain = this.ctx.createGain();
+        this.breathingGain.gain.value = 0;
+        
+        // Onde sinusoïdale très douce pour le drone
+        this.breathingOsc = this.ctx.createOscillator();
+        this.breathingOsc.type = 'sine';
+        this.breathingOsc.frequency.value = 100;
+        
+        this.breathingOsc.connect(this.breathingGain);
+        this.breathingGain.connect(this.compressor);
+        // On envoie aussi dans la reverb pour enrober l'audio
+        this.breathingGain.connect(this.reverbNode);
+        
+        this.breathingOsc.start(this.ctx.currentTime);
+    }
+
+    stopBreathingGuide() {
+        if (this.breathingOsc) {
+            this.breathingGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.5);
+            this.breathingOsc.stop(this.ctx.currentTime + 1);
+            this.breathingOsc = null;
+            this.breathingGain = null;
+        }
+    }
+
+    updateBreathingGuide(phaseIndex, progress) {
+        if (!this.breathingOsc) this.startBreathingGuide();
+        
+        // Calcule l'échelle (0 à 1) basée sur la phase
+        let scale = 0;
+        if (phaseIndex === 0) scale = progress;                  // Inhale
+        else if (phaseIndex === 1) scale = 1;                    // Hold
+        else if (phaseIndex === 2) scale = 1 - progress;         // Exhale
+        else if (phaseIndex === 3) scale = 0;                    // Hold out
+        
+        // Courbe douce pour l'audio
+        let smoothScale = (1 - Math.cos(scale * Math.PI)) / 2;
+        
+        const now = this.ctx.currentTime;
+        // Le volume monte jusqu'à 0.3 et le pitch de 100 Hz à 120 Hz
+        if (this.breathingGain) {
+            this.breathingGain.gain.setTargetAtTime(smoothScale * 0.3, now, 0.1);
+        }
+        if (this.breathingOsc) {
+            this.breathingOsc.frequency.setTargetAtTime(80 + (smoothScale * 30), now, 0.1);
+        }
+    }
+    
+    resetBreathingGuide() {
+        this.stopBreathingGuide();
+    }
+
+    triggerBell() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(528, now); // Note de base (Solfeggio 528Hz)
+        
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.08, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 3);
+        
+        osc.connect(gain);
+        gain.connect(this.reverbNode); // Dans la reverb 
+        gain.connect(this.compressor); 
+
+        // Harmonique supérieure pour l'effet "bol tibétain" ou "cloche"
+        const osc2 = this.ctx.createOscillator();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(528 * 2.7, now);
+        
+        const gain2 = this.ctx.createGain();
+        gain2.gain.setValueAtTime(0, now);
+        gain2.gain.linearRampToValueAtTime(0.02, now + 0.01);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 2);
+        
+        osc2.connect(gain2);
+        gain2.connect(this.reverbNode);
+        
+        osc.start(now);
+        osc.stop(now + 3.1);
+        osc2.start(now);
+        osc2.stop(now + 2.1);
+    }
+}

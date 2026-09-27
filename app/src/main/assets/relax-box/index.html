@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- Informations SEO Primordiales -->
+    <title>Relax-Box | Generative Soundscapes & Meditation</title>
+    <meta name="description" content="Relax-Box is a generative audio mixer for sleep, focus, and meditation. Create your own soothing soundscapes with our clinical cardiac coherence breathwork tool.">
+    <meta name="keywords" content="relax, sleep sounds, generative music, lofi maker, ambient noise, cardiac coherence, breathing exercise, meditation, focus sounds, white noise">
+    <meta name="author" content="B-H.DEV">
+    <link rel="canonical" href="https://relax-box.b-h.dev/">
+    <meta name="theme-color" content="#1a202c">
+
+    <!-- Open Graph (Réseaux Sociaux / Partages) -->
+    <meta property="og:title" content="Relax-Box | Generative Soundscapes & Meditation">
+    <meta property="og:description" content="A generative sound box with procedural sounds to heal, sleep, and relax. Create your own calming atmosphere.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://relax-box.b-h.dev/assets/favicon.png">
+    <meta property="og:url" content="https://relax-box.b-h.dev/">
+
+    <!-- X / Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Relax-Box | Generative Soundscapes">
+    <meta name="twitter:description" content="Mix rain, winds, and ambient frequencies to create your ultimate soundscape.">
+    
+    <!-- JSON-LD Structure Data for Google Rich Snippets -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Relax-Box",
+      "url": "https://relax-box.b-h.dev/",
+      "description": "Generative audio mixer for sleep, focus, and meditation. Includes cardiac coherence breathwork.",
+      "applicationCategory": "HealthAndFitnessApplication",
+      "operatingSystem": "All",
+      "author": {
+        "@type": "Organization",
+        "name": "B-H.DEV"
+      }
+    }
+    </script>
+
+    <!-- Fichiers -->
+    <link rel="stylesheet" href="assets/css/style.css?v=1.1">
+    <link rel="icon" type="image/png" href="assets/favicon.png">
+    <script src="assets/js/i18n.js"></script>
+    <script src="assets/js/lucide.js"></script>
+</head>
+
+<body>
+    
+    <!-- H1 invisible pour l'accessibilité et les robots SEO -->
+    <h1 class="sr-only" data-i18n="app.h1">Relax-Box : Table de mixage générative pour sons d'ambiance et espace de respiration guidée.</h1>
+
+    <div class="scanlines"></div>
+    <canvas id="mainCanvas" class="visualizer-canvas"></canvas>
+
+    <!-- Floating Controls - Layout avec 3 boutons en haut, 2 en bas -->
+    <div id="viewControls" class="fixed top-4 right-4 z-50 flex gap-2 interactive transition-opacity duration-300 floating-controls-container">
+        <!-- Première Ligne (Info + Visuels) -->
+        <div class="flex gap-2">
+            <button id="infoBtn" class="btn-icon" data-i18n-title="controls.info">
+                <i data-lucide="info"></i>
+            </button>
+            <button id="visualModeBtn" class="btn-icon" data-i18n-title="controls.visual">
+                <i data-lucide="palette"></i>
+            </button>
+            <button id="themeBtn" class="btn-icon" data-i18n-title="controls.theme">
+                <i data-lucide="sun"></i>
+            </button>
+        </div>
+        <!-- Deuxième Ligne (Contrôles globaux) -->
+        <div class="flex gap-2 floating-controls-row">
+            <div class="relative">
+                <button id="langBtn" class="btn-icon" data-i18n-title="controls.lang">
+                    <i data-lucide="globe"></i>
+                </button>
+                <div id="langMenu" class="absolute top-full right-0 mt-2 bg-black/90 border border-blue-500/30 rounded shadow-xl backdrop-blur-md z-50 opacity-0 pointer-events-none transition-opacity duration-200 flex flex-col p-1 w-32 hidden">
+                    <button class="lang-opt-btn text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-900/50 rounded transition" data-lang="fr">Français</button>
+                    <button class="lang-opt-btn text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-900/50 rounded transition" data-lang="en">English</button>
+                    <button class="lang-opt-btn text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-900/50 rounded transition" data-lang="es">Español</button>
+                    <button class="lang-opt-btn text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-900/50 rounded transition" data-lang="nl">Nederlands</button>
+                    <button class="lang-opt-btn text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-900/50 rounded transition" data-lang="hi">हिन्दी</button>
+                    <button class="lang-opt-btn text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-900/50 rounded transition" data-lang="zh">中文</button>
+                    <button class="lang-opt-btn text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-900/50 rounded transition" data-lang="ja">日本語</button>
+                </div>
+            </div>
+            <button id="zenBtn" class="btn-icon" data-i18n-title="controls.zen">
+                <i data-lucide="eye-off"></i>
+            </button>
+            <button id="fullscreenBtn" class="btn-icon" data-i18n-title="controls.fullscreen">
+                <i data-lucide="maximize"></i>
+            </button>
+        </div>
+    </div>
+
+
+    <div id="uiContainer" class="ui-layer">
+        <header class="flex justify-between items-center w-full interactive">
+            <div class="flex items-center gap-4">
+                <img src="assets/favicon.png" alt="Relax-Box Logo" class="app-logo">
+
+                <div>
+                    <h1 class="text-4xl font-bold tracking-widest" style="text-shadow: 0 0 15px var(--accent-primary);">
+                        RELAX-BOX</h1>
+                    <div class="flex items-center mt-1 group select-none">
+                        <span class="green-dot"></span>
+                        <span class="logo-text">B-H.DEV</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Overlay de démarrage -->
+        <div id="startOverlay"
+            class="absolute inset-0 flex flex-col items-center justify-center interactive z-50 transition-opacity duration-500"
+            style="background: rgba(0,0,0,0.88); backdrop-filter: blur(10px);">
+
+            <h2 class="text-3xl font-bold mb-3 text-purple-300 tracking-widest uppercase">RELAX-BOX</h2>
+            <p class="text-gray-300 mb-6 max-w-md mx-auto text-center px-4 text-sm" data-i18n="start.text">Appuyez sur Démarrer pour lancer les ambiances sonores et la relaxation.</p>
+
+            <!-- Bouton Démarrer très visible et interactif -->
+            <button id="startPlayBtn" type="button" class="btn-neon px-8 py-4 rounded-full text-lg font-bold flex items-center justify-center gap-3 cursor-pointer shadow-2xl transition-transform active:scale-95 mb-4" style="background: linear-gradient(135deg, #7c3aed, #4f46e5); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); min-width: 240px;" onclick="if(window.LumibookBridge){window.LumibookBridge.startEngine();}">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                <span>Démarrer Relax-Box</span>
+            </button>
+
+            <!-- Le vrai lecteur HTML visible -->
+            <audio id="bg-audio" src="assets/silence.mp3" controls loop playsinline
+                style="width: 250px; outline: none; border-radius: 30px;"></audio>
+
+        </div>
+        <!-- Fin du startOverlay existant -->
+
+        <!-- Wake Up Overlay -->
+        <div id="wakeupOverlay"
+            class="absolute inset-0 flex items-center justify-center interactive z-50 transition-opacity duration-500 hidden"
+            style="background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);">
+            <div class="text-center">
+                <h2 class="text-3xl font-bold mb-6 text-purple-300 tracking-widest uppercase" data-i18n="wakeup.title">SYSTÈME EN VEILLE</h2>
+                <p class="text-gray-400 mb-8 max-w-md mx-auto" data-i18n="wakeup.text">Le minuteur de sommeil s'est écoulé. Le moteur audio a été suspendu pour économiser votre batterie.</p>
+                <button id="wakeupBtn" class="btn-neon px-8 py-4 rounded-sm text-xl font-bold flex items-center justify-center gap-3 mx-auto">
+                    <i data-lucide="power"></i> <span data-i18n="wakeup.btn">RELANCER L'AUDIO</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tutorial Welcome Overlay -->
+        <div id="tutorialWelcomeOverlay"
+            class="absolute inset-0 flex items-center justify-center interactive transition-opacity duration-500 hidden"
+            style="background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 60;">
+            <div class="glass-panel p-8 rounded-xl text-center border border-purple-500/30 w-11/12 max-w-md">
+                <div class="w-16 h-16 rounded-full bg-purple-900/50 flex items-center justify-center mx-auto mb-6 border border-purple-500/50">
+                    <i data-lucide="compass" class="w-8 h-8 text-purple-300"></i>
+                </div>
+                <h2 class="text-2xl font-bold mb-4 text-purple-300 tracking-widest uppercase" data-i18n="tutorial.welcome">Bienvenue</h2>
+                <p class="text-gray-400 mb-8 text-sm leading-relaxed" data-i18n="tutorial.welcomeText">Relax-Box est une table de mixage générative pour créer vos propres paysages sonores apaisants.<br><br>Acceptez-vous une petite visite guidée d'une minute pour en découvrir les secrets ?</p>
+                
+                <div class="flex flex-col gap-3">
+                    <button id="tutorialStartTourBtn" class="w-full py-3 bg-purple-600/80 hover:bg-purple-500/80 text-white rounded font-bold tracking-widest transition flex items-center justify-center gap-2">
+                        <i data-lucide="play" class="w-4 h-4"></i> <span data-i18n="tutorial.start">LANCER LA VISITE</span>
+                    </button>
+                    <button id="tutorialIgnoreTourBtn" class="w-full py-3 border border-gray-600/50 text-gray-400 hover:text-white hover:bg-gray-800/50 rounded font-bold tracking-widest transition text-xs" data-i18n="tutorial.ignore">
+                        EXPLORER PAR MOI-MÊME
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tutorial Spotlight Overlay -->
+        <div id="tutorialSpotlightOverlay" 
+             class="absolute inset-0 interactive transition-opacity duration-500 hidden pointer-events-auto"
+             style="background: rgba(0,0,0,0.7); backdrop-filter: blur(2px); z-index: 60; opacity: 0; transition: clip-path 0.3s ease-in-out, opacity 0.5s ease;">
+            
+            <!-- Tooltip attached to the spotlight -->
+            <div id="tutorialTooltip" class="absolute bg-black/95 border border-purple-500/50 p-6 sm:p-8 rounded-lg shadow-[0_0_30px_rgba(168,85,247,0.3)] w-[320px] transition-all duration-300 transform translate-y-2 opacity-0 flex flex-col gap-5">
+                <p id="tutorialTooltipText" class="text-sm text-gray-200 leading-relaxed font-medium"></p>
+                <div class="flex justify-between items-center mt-3 pt-4 border-t border-gray-700/50">
+                    <button id="tutorialSkipBtn" class="text-xs text-gray-400 hover:text-white transition ml-1 px-2 py-1" data-i18n="tutorial.skip">Passer</button>
+                    <button id="tutorialNextBtn" class="text-xs bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded font-bold tracking-wider flex items-center transition"><span data-i18n="tutorial.next">Suivant</span> <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Informations Overlay -->
+        <div id="infoOverlay" class="absolute inset-0 flex items-center justify-center interactive z-50 transition-opacity duration-500 hidden" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);">
+            <div class="glass-panel p-6 rounded-xl border border-gray-500/30 w-11/12 max-w-lg relative" style="max-height: 85dvh; overflow-y: auto;">
+                <button id="closeInfoBtn" class="absolute top-4 right-4 text-gray-400 hover:text-white transition">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+                
+                <h3 class="text-2xl font-bold mb-6 text-gray-200 tracking-widest uppercase flex items-center gap-3">
+                    <i data-lucide="info" class="w-6 h-6 text-blue-400"></i> <span data-i18n="info.title">Index & Légendes</span>
+                </h3>
+                
+                <div class="space-y-4 mb-8">
+                    <!-- Légendes Console -->
+                    <div class="bg-black/40 p-4 rounded-lg border border-gray-700/50">
+                        <h4 class="text-xs text-emerald-400 font-bold mb-3 uppercase tracking-wider" data-i18n="info.sec1">Console & Mixage</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-300">
+                            <div class="flex items-center gap-3"><i data-lucide="wind" class="w-4 h-4 text-purple-400"></i> <span data-i18n="info.i1">Espace Respiration</span></div>
+                            <div class="flex items-center gap-3"><i data-lucide="shuffle" class="w-4 h-4 text-purple-400"></i> <span data-i18n="info.i2">Auto-Shuffle</span></div>
+                            <div class="flex items-center gap-3"><i data-lucide="sparkles" class="w-4 h-4 text-emerald-400"></i> <span data-i18n="info.i3">Presets & Sauvegardes</span></div>
+                            <div class="flex items-center gap-3"><i data-lucide="sliders-horizontal" class="w-4 h-4 text-blue-400"></i> <span data-i18n="info.i4">Réglages Globaux (Espace)</span></div>
+                            <div class="flex items-center gap-3"><i data-lucide="moon" class="w-4 h-4 text-blue-400"></i> <span data-i18n="info.i5">Minuteur de sommeil</span></div>
+                            <div class="flex items-center gap-3"><i data-lucide="volume-x" class="w-4 h-4 text-red-400"></i> <span data-i18n="info.i6">Tout arrêter (Silence)</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Légendes Affichage -->
+                    <div class="bg-black/40 p-4 rounded-lg border border-gray-700/50">
+                        <h4 class="text-xs text-purple-400 font-bold mb-3 uppercase tracking-wider" data-i18n="info.sec2">Interface Visuelle</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-300">
+                            <div class="flex items-center gap-3"><i data-lucide="palette" class="w-4 h-4"></i> <span data-i18n="info.i7">Changer d'animation WebGL</span></div>
+                            <div class="flex items-center gap-3"><i data-lucide="sun" class="w-4 h-4"></i> <span data-i18n="info.i8">Thème (Clair / Sombre)</span></div>
+                            <div class="flex items-center gap-3"><i data-lucide="eye-off" class="w-4 h-4"></i> <span data-i18n="info.i9">Mode Zen (Masquer UI)</span></div>
+                            <div class="flex items-center gap-3"><i data-lucide="maximize" class="w-4 h-4"></i> <span data-i18n="info.i10">Plein écran</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-center border-t border-gray-700/50 pt-6">
+                    <button id="replayTutorialBtn" class="flex items-center gap-2 text-sm text-purple-300 border border-purple-500/50 hover:bg-purple-900/40 px-4 py-2 rounded transition">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> <span data-i18n="info.replay">Rejouer la visite guidée</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Breathing Overlay -->
+        <div id="breathingOverlay" class="absolute inset-0 flex items-center justify-center interactive z-40 transition-opacity duration-500 hidden" style="background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);">
+            <div class="glass-panel p-6 rounded-xl text-center border border-purple-500/30 w-11/12 max-w-sm relative">
+                <button id="closeBreathingBtn" class="absolute top-2 right-2 text-gray-400 hover:text-white transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+                <h3 class="text-xl font-bold mb-4 text-purple-300 tracking-widest uppercase flex justify-center items-center gap-2">
+                    <i data-lucide="wind" class="w-5 h-5"></i> <span data-i18n="breathing.title">Respiration</span>
+                </h3>
+                
+                <div class="mb-5 text-left">
+                    <label for="breathingPatternSelect" class="block text-xs uppercase tracking-wider text-gray-400 mb-2" data-i18n="breathing.pattern">Rythme</label>
+                    <select id="breathingPatternSelect" class="w-full bg-black/50 border border-gray-600 rounded text-gray-200 text-sm p-2 outline-none focus:border-purple-500">
+                        <option value="coherence" data-i18n="breathing.p1">Cohérence Cardiaque (5s - 5s)</option>
+                        <option value="box" data-i18n="breathing.p2">Box Breathing (4s - 4s - 4s - 4s)</option>
+                        <option value="sleep" data-i18n="breathing.p3">Relaxation 4-7-8 (Sommeil)</option>
+                    </select>
+                </div>
+
+                <div class="mb-5 text-left flex gap-3">
+                    <div class="flex-1">
+                        <label for="breathingVisualSelect" class="block text-xs uppercase tracking-wider text-gray-400 mb-2" data-i18n="breathing.visual">Visuel</label>
+                        <select id="breathingVisualSelect" class="w-full bg-black/50 border border-gray-600 rounded text-gray-200 text-sm p-2 outline-none focus:border-purple-500">
+                            <option value="fractal" data-i18n="breathing.v1">Fractale</option>
+                            <option value="lotus" data-i18n="breathing.v2">Fleur de Lotus</option>
+                            <option value="orb" data-i18n="breathing.v3">Orbe Éthéré</option>
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label for="breathingDurationSelect" class="block text-xs uppercase tracking-wider text-gray-400 mb-2" data-i18n="breathing.duration">Durée</label>
+                        <select id="breathingDurationSelect" class="w-full bg-black/50 border border-gray-600 rounded text-gray-200 text-sm p-2 outline-none focus:border-purple-500">
+                            <option value="0" data-i18n="breathing.d0">Infini</option>
+                            <option value="60" data-i18n="breathing.d1">1 Minute</option>
+                            <option value="180" data-i18n="breathing.d3">3 Minutes</option>
+                            <option value="300" data-i18n="breathing.d5">5 Minutes</option>
+                            <option value="600" data-i18n="breathing.d10">10 Minutes</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-6 flex items-center justify-between bg-black/30 p-3 rounded border border-gray-700/50">
+                    <label for="breathingAudioGuide" class="text-sm text-gray-300 cursor-pointer flex items-center gap-2">
+                        <i data-lucide="volume-2" class="w-4 h-4 text-purple-400"></i> <span data-i18n="breathing.audio">Guide Sonore</span>
+                    </label>
+                    <input type="checkbox" id="breathingAudioGuide" checked class="w-4 h-4 accent-purple-500 cursor-pointer">
+                </div>
+
+                <button id="startBreathingBtn" class="w-full py-3 bg-purple-600/80 hover:bg-purple-500/80 text-white rounded font-bold tracking-widest transition" data-i18n="breathing.start">
+                    DÉMARRER
+                </button>
+            </div>
+        </div>
+
+        <!-- Conteneur pour les textes flottants de respiration -->
+        <div id="bubblesContainer" class="absolute inset-0 pointer-events-none z-30 overflow-hidden"></div>
+
+        <!-- Mixer Panel -->
+        <div id="controlsPanel"
+            class="glass-panel rounded-xl w-full max-w-[95%] xl:max-w-[85rem] mx-auto interactive transform opacity-0 flex flex-col mt-4"
+            style="max-height: 85dvh; overflow: visible;">
+            <!-- Header du Mixer -->
+            <div class="flex justify-between items-center p-3 border-b border-gray-500/20 rounded-t-xl"
+                style="background: var(--panel-header-bg);">
+                <span class="text-xs font-bold tracking-widest" style="color: var(--accent-primary);" data-i18n="mixer.title">CONSOLE</span>
+
+                <div class="flex items-center gap-2 sm:gap-3">
+
+                    <!-- Bouton Respiration -->
+                    <button id="breathingNavBtn" class="p-2 border border-purple-500/50 text-purple-400 rounded hover:bg-purple-900/50 transition" data-i18n-title="mixer.breathing">
+                        <i data-lucide="wind" class="w-4 h-4"></i>
+                    </button>
+
+                    <div class="relative">
+                        <button id="autoShuffleBtn" class="p-2 border border-purple-500/50 text-purple-400 rounded hover:bg-purple-900/50 transition flex items-center gap-1" data-i18n-title="mixer.shuffle">
+                            <i data-lucide="play" class="w-3 h-3"></i>
+                            <i data-lucide="shuffle" class="w-4 h-4"></i>
+                        </button>
+
+                        <div id="shuffleMenu" class="absolute bottom-full left-0 mb-2 w-48 bg-black/90 border border-purple-500/30 rounded shadow-xl backdrop-blur-md z-50 opacity-0 pointer-events-none transition-opacity duration-200 flex flex-col p-1">
+                            <button class="shuffle-mode-btn text-left px-3 py-2 text-sm text-purple-300 hover:bg-purple-900/50 rounded transition border-b border-purple-500/20" data-mode="global" data-i18n="shuffleMenu.global">
+                                🌌 Mode Global
+                            </button>
+                            <button class="shuffle-mode-btn text-left px-3 py-2 text-sm text-indigo-300 hover:bg-indigo-900/50 rounded transition" data-mode="sleep" data-i18n="shuffleMenu.sleep">
+                                💤 Mode Sleep
+                            </button>
+                            <button class="shuffle-mode-btn text-left px-3 py-2 text-sm text-sky-300 hover:bg-sky-900/50 rounded transition" data-mode="focus" data-i18n="shuffleMenu.focus">
+                                🧠 Mode Focus
+                            </button>
+                            <button class="shuffle-mode-btn text-left px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-900/50 rounded transition" data-mode="zen" data-i18n="shuffleMenu.zen">
+                                🧘 Mode Zen
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Bouton Presets -->
+                    <button id="presetsBtn"
+                        class="p-2 border border-emerald-500/50 text-emerald-400 rounded hover:bg-emerald-900/50 transition"
+                        data-i18n-title="mixer.presets">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                    </button>
+
+                    <!-- Bouton Global Settings (Reverb / Timer) -->
+                    <button id="globalSettingsBtn"
+                        class="p-2 border border-blue-500/50 text-blue-400 rounded hover:bg-blue-900/50 transition"
+                        data-i18n-title="mixer.setup">
+                        <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+                    </button>
+
+                    <!-- Bouton Silence -->
+                    <button onclick="app.reset()" class="p-2 border border-red-500/50 text-red-400 rounded hover:bg-red-900/50 transition flex items-center gap-1" data-i18n-title="mixer.reset">
+                        <i data-lucide="square" class="w-3 h-3 fill-current"></i>
+                        <i data-lucide="volume-x" class="w-4 h-4"></i>
+                    </button>
+
+                    <button id="togglePanelBtn" class="text-gray-400 hover:text-white transition p-1 ml-2">
+                        <i data-lucide="chevron-down" id="toggleIcon"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Panneau de réglages Globaux -->
+            <div id="globalSettingsPanel" class="grid grid-rows-[0fr] transition-all duration-300 ease-in-out border-b border-gray-500/20" style="background: var(--panel-body-bg);">
+                <div class="overflow-hidden">
+                    <div class="p-4 space-y-4">
+                        <div class="fader-group">
+                            <div class="flex justify-between mb-1">
+                                <span class="track-label text-blue-400 block" data-i18n="settings.lofi">
+                                    Mode Lo‑Fi
+                                </span>
+                            </div>
+                            <div class="flex gap-1 text-[11px]">
+                                <button id="lofi-off"
+                                    class="settings-btn flex-1 px-2 py-1 rounded border transition-colors" data-i18n="settings.lofiOff">
+                                    Off
+                                </button>
+                                <button id="lofi-soft"
+                                    class="settings-btn flex-1 px-2 py-1 rounded border transition-colors" data-i18n="settings.lofiSoft">
+                                    Soft
+                                </button>
+                                <button id="lofi-deep"
+                                    class="settings-btn flex-1 px-2 py-1 rounded border transition-colors" data-i18n="settings.lofiDeep">
+                                    Deep
+                                </button>
+                            </div>
+                        </div>
+                    
+                
+                        <div class="fader-group">
+                            <div class="flex justify-between mb-1">
+                                <label for="slider-reverb" class="track-label text-blue-400" data-i18n="settings.reverb">Taille de l'Espace (Reverb)</label>
+                                <span class="text-[10px] font-mono w-8 text-right opacity-70 text-blue-400" id="val-reverb">50%</span>
+                            </div>
+                            <input type="range" id="slider-reverb" min="0" max="1" step="0.01" value="0.5">
+                        </div>
+                        <div class="fader-group">
+                            <div class="flex justify-between mb-1">
+                                <label for="slider-tone" class="track-label text-blue-400" data-i18n="settings.tone">
+                                    Doux / Clair (Filtre)
+                                </label>
+                                <span class="text-[10px] font-mono w-8 text-right opacity-70 text-blue-400" id="val-tone">
+                                    50%
+                                </span>
+                            </div>
+                            <input type="range" id="slider-tone" min="0" max="100" step="1" value="50">
+                        </div>
+
+                        <!-- Sleep Timer -->
+                        <div class="fader-group">
+                            <div class="flex justify-between items-center mb-1">
+                                <label for="slider-timer" class="track-label text-blue-400 flex items-center gap-2">
+                                    <i data-lucide="moon" class="w-3 h-3"></i> <span data-i18n="settings.timer">Minuteur de sommeil</span>
+                                </label>
+                                <span class="text-[10px] font-mono w-16 text-right opacity-70 text-blue-400" id="val-timer" data-i18n="settings.disabled">Désactivé</span>
+                            </div>
+                            <!-- Curseur de 0 à 120 minutes -->
+                            <input type="range" id="slider-timer" min="0" max="120" step="5" value="0">
+                            <!-- Petit texte qui affichera le compte à rebours dynamique -->
+                            <div id="timer-countdown" class="text-[10px] text-blue-400 mt-1 text-right hidden">Arrêt dans
+                                --:--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NOUVEAU : Panneau de Presets (caché par défaut) -->
+            <div id="presetsPanel" class="grid grid-rows-[0fr] transition-all duration-300 ease-in-out border-b border-gray-500/20" style="background: var(--panel-body-bg);">
+                <!-- ON AJOUTE UN WRAPPER 'overflow-hidden' ICI -->
+                <div class="overflow-hidden">
+                    <div class="p-4 space-y-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="track-label text-emerald-400" data-i18n="presets.defaultTitle">Presets pré‑définis</span>
+                            <span class="text-[10px] font-mono opacity-60" data-i18n="presets.defaultSub">
+                                4 scènes optimisées
+                            </span>
+                        </div>
+
+                        <!-- Presets pré‑définis -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <button
+                                class="preset-default-btn preset-btn text-emerald-300 px-2 py-1 text-[11px] border border-emerald-500/60 rounded bg-black/60 hover:bg-emerald-900/40 transition preset-default-btn"
+                                data-preset-id="sleep-deep" data-i18n="presets.p1">
+                                🌙 Sommeil profond
+                            </button>
+                            <button
+                                class="preset-default-btn preset-btn text-emerald-300 px-2 py-1 text-[11px] border border-emerald-500/60 rounded bg-black/60 hover:bg-emerald-900/40 transition preset-default-btn"
+                                data-preset-id="forest-night" data-i18n="presets.p2">
+                                🌲 Forêt nocturne
+                            </button>
+                            <button
+                                class="preset-default-btn preset-btn text-emerald-300 px-2 py-1 text-[11px] border border-emerald-500/60 rounded bg-black/60 hover:bg-emerald-900/40 transition preset-default-btn"
+                                data-preset-id="focus-alpha" data-i18n="presets.p3">
+                                🎧 Focus Alpha
+                            </button>
+                            <button
+                                class="preset-default-btn preset-btn text-emerald-300 px-2 py-1 text-[11px] border border-emerald-500/60 rounded bg-black/60 hover:bg-emerald-900/40 transition preset-default-btn"
+                                data-preset-id="theta-dreams" data-i18n="presets.p4">
+                                🧠 Theta Dreams
+                            </button>
+                        </div>
+
+                        <hr class="border-gray-700/50 my-2">
+
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="track-label text-emerald-300" data-i18n="presets.customTitle">Presets personnalisés</span>
+                            <span class="text-[10px] font-mono opacity-60" data-i18n="presets.customSub">
+                                4 slots sauvegardables
+                            </span>
+                        </div>
+
+                        <!-- Presets custom -->
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <div class="flex gap-1">
+                                <button class="preset-user-btn preset-btn text-emerald-300 px-2 py-1 text-[11px] border border-emerald-500/60 rounded bg-black/60 hover:bg-emerald-900/40 transition preset-user-btn" data-preset-slot="1">C1</button>
+                                <button class="preset-user-btn preset-btn text-emerald-300 px-2 py-1 text-[11px] border border-emerald-500/60 rounded bg-black/60 hover:bg-emerald-900/40 transition preset-user-btn" data-preset-slot="2">C2</button>
+                                <button class="preset-user-btn preset-btn text-emerald-300 px-2 py-1 text-[11px] border border-emerald-500/60 rounded bg-black/60 hover:bg-emerald-900/40 transition preset-user-btn" data-preset-slot="3">C3</button>
+                                <button class="preset-user-btn preset-btn text-emerald-300 px-2 py-1 text-[11px] border border-emerald-500/60 rounded bg-black/60 hover:bg-emerald-900/40 transition preset-user-btn" data-preset-slot="4">C4</button>
+                            </div>
+
+                            <button id="savePresetBtn"
+                                class="preset-btn ml-2 px-3 py-1 text-[11px] border border-emerald-400/70 text-emerald-300 rounded bg-black/60 hover:bg-emerald-900/50 transition">
+                                <span data-i18n="presets.save" class="whitespace-nowrap flex">💾 Sauver le mix → slot sélectionné</span>
+                            </button>
+
+                            <!-- NOUVEAU : Bouton Partager -->
+                            <button id="shareUrlBtn" class="preset-btn ml-2 px-3 py-1 text-[11px] border border-blue-400/70 text-blue-300 rounded bg-black/60 hover:bg-blue-900/50 transition flex items-center gap-1" title="Copier le lien de ce mix">
+                                <i data-lucide="share-2" class="w-3 h-3"></i> <span data-i18n="presets.share">Partager</span>
+                            </button>
+                            
+                            <!-- NOUVEAU : Bouton Effacer -->
+                            <button id="clearPresetBtn" class="preset-btn ml-2 px-3 py-1 text-[11px] border border-red-400/70 text-red-300 rounded bg-black/60 hover:bg-red-900/50 transition flex items-center gap-1" title="Activer le mode suppression puis cliquer sur le slot">
+                                <i data-lucide="trash-2" class="w-3 h-3"></i> <span data-i18n="presets.clear">Effacer</span>
+                            </button>
+                            <span id="presetStatus" class="text-[10px] font-mono opacity-60 ml-auto" data-i18n="presets.noSlot">
+                                Aucun slot sélectionné
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scrollable Content -->
+            <div id="tracksContainer" class="overflow-y-auto custom-scroll p-4 flex-1">
+                <!-- Compact Grid -->
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-6">
+                    <div class="col-section">
+                        <h3 class="section-title" style="color: #4ade80" data-i18n="mixer.categories.nature">Nature & Vie</h3>
+                        <div id="group-nature" class="space-y-2"></div>
+                    </div>
+                    <div class="col-section">
+                        <h3 class="section-title" style="color: #60a5fa" data-i18n="mixer.categories.atmos">Atmosphères</h3>
+                        <div id="group-atmosphere" class="space-y-2"></div>
+                    </div>
+                    <div class="col-section">
+                        <h3 class="section-title" style="color: #c084fc" data-i18n="mixer.categories.freq">Fréquences</h3>
+                        <div id="group-drone" class="space-y-2"></div>
+                    </div>
+                    <div class="col-section">
+                        <h3 class="section-title" style="color: #f472b6" data-i18n="mixer.categories.melody">Mélodies</h3>
+                        <div id="group-melody" class="space-y-2"></div>
+                    </div>
+                    <div class="col-section">
+                        <h3 class="section-title" style="color: #fb923c" data-i18n="mixer.categories.texture">Textures</h3>
+                        <div id="group-synth" class="space-y-2"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-2 text-center rounded-b-xl border-t border-gray-500/20 panel-footer flex justify-center items-center"
+                style="background: var(--panel-footer-bg)">
+                <span class="text-[10px] font-mono opacity-60 flex items-center gap-1 select-none" style="color: var(--text-dim)">
+                    &copy; 2026 Benjamin Hautfenne pour <span class="footer-link font-semibold">b-h.dev</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div id="restoreArea" class="fixed inset-0 z-50 hidden cursor-pointer" title="Cliquer pour afficher l'interface">
+    </div>
+
+    <script type="module" src="./assets/js/breathing.js"></script>
+    <script type="module" src="./assets/js/app.js?v=1.1"></script>
+</body>
+
+</html>
