@@ -1129,6 +1129,36 @@ export class AudioEngine {
         }
     }
 
+    /**
+     * ANTI-POP : fade-in global du master.
+     * À appeler après un resume() du AudioContext ou après un reset massif de
+     * pistes, pour éviter le clic de démarrage brutal.
+     */
+    fadeMasterIn(duration = 0.15) {
+        if (!this.masterGain || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const g = this.masterGain.gain;
+        // ANTI-CONFLIT : on cible la valeur demandée par l'utilisateur (target),
+        // pas 0.5 en dur. Sinon le fade-in écrase le volume choisi.
+        const target = (g.__targetVolume !== undefined) ? g.__targetVolume : 0.5;
+        g.cancelScheduledValues(now);
+        g.setValueAtTime(Math.max(0.0001, g.value), now);
+        g.linearRampToValueAtTime(Math.max(0.0001, target), now + duration);
+    }
+
+    /**
+     * ANTI-POP : fade-out global du master.
+     * À appeler avant un suspend() du AudioContext ou un reset massif de pistes.
+     */
+    fadeMasterOut(duration = 0.15) {
+        if (!this.masterGain || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const g = this.masterGain.gain;
+        g.cancelScheduledValues(now);
+        g.setValueAtTime(Math.max(0.0001, g.value), now);
+        g.linearRampToValueAtTime(0.0001, now + duration);
+    }
+
     // --- BREATHING GUIDE ---
     
     startBreathingGuide() {
