@@ -90,20 +90,49 @@ fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Left: Logo and Book Title (Removed "Lumibook", now "Les Luminautes" and "La Voie de Lumière")
+                // Left: Compact Original Printable PDF Download Button
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .weight(1f, fill = false)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(readerColors.accent.copy(alpha = 0.12f))
+                        .border(1.dp, readerColors.accent.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                        .clickable {
+                            PdfExporter.exportAndOpenPdf(context)
+                        }
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                        .testTag("download_pdf_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FileDownload,
+                        contentDescription = "Télécharger ou imprimer le PDF original",
+                        tint = readerColors.accent,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = "PDF",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = readerColors.accent
+                    )
+                }
+
+                // Center: Logo and Book Title (enlarged, centered)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .weight(1f)
                         .clickable { onOpenTableOfContents() }
                 ) {
-                    LumibookLogoBadge(size = 36.dp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
+                    LumibookLogoBadge(size = 40.dp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "Les Luminautes",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
+                            fontSize = 19.sp,
                             color = readerColors.textPrimary,
                             fontFamily = FontFamily.Serif,
                             maxLines = 1,
@@ -111,7 +140,7 @@ fun ReaderTopBar(
                         )
                         Text(
                             text = "La Voie de Lumière",
-                            fontSize = 11.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = readerColors.accent,
                             maxLines = 1,
@@ -120,62 +149,32 @@ fun ReaderTopBar(
                     }
                 }
 
-                // Middle: Compact Original Printable PDF Download Button
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(readerColors.accent.copy(alpha = 0.12f))
-                        .border(1.dp, readerColors.accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                        .clickable {
-                            PdfExporter.exportAndOpenPdf(context)
-                        }
-                        .padding(horizontal = 7.dp, vertical = 4.dp)
-                        .testTag("download_pdf_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FileDownload,
-                        contentDescription = "Télécharger ou imprimer le PDF original",
-                        tint = readerColors.accent,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text(
-                        text = "PDF",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = readerColors.accent
-                    )
-                }
-
                 // Right: Compact luminautes.org web button (sphere/globe icon) & Actions
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // luminautes.org compact web button
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(10.dp))
                             .background(readerColors.surfaceVariant)
-                            .border(1.dp, readerColors.accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                            .border(1.dp, readerColors.accent.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
                             .clickable {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://luminautes.org"))
                                 context.startActivity(intent)
                             }
-                            .padding(horizontal = 7.dp, vertical = 4.dp)
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
                             .testTag("luminautes_org_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Language,
                             contentDescription = "Visiter le site luminautes.org",
                             tint = readerColors.accent,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
                             text = "Web",
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = readerColors.accent
                         )
