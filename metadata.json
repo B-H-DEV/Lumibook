@@ -1,0 +1,6 @@
+{
+  "name": "Lumibook",
+  "description": "Liseuse et livre audio immersif pour Les Luminautes avec thèmes clair/sombre/sépia, synchronisation vocale et musique méditative.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
