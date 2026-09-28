@@ -1,31 +1,65 @@
+# --- Android / Gradle ---
 *.iml
-.gradle
-.kotlin
-/local.properties
-local.properties
-.env
-debug.keystore
-debug.keystore.base64
-my-upload-key.jks
-*.jks
-*.keystore
-
-# Build folders
+.gradle/
+.kotlin/
 build/
 */build/
 .build-outputs/
 .cxx/
 .externalNativeBuild/
 captures/
+release/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+output.json
 
-# IDE
+# --- Signing / Secrets (ne jamais committer) ---
+/local.properties
+local.properties
+.env
+.env.*
+!.env.example
+debug.keystore
+debug.keystore.base64
+my-upload-key.jks
+*.jks
+*.keystore
+keystore.properties
+secrets.properties
+
+# --- IDE ---
 .idea/
 *.iws
 *.ipr
 out/
+.vscode/
+*.swp
+*.swo
+*~
 
-# OS
+# --- OS ---
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
+desktop.ini
 
+# --- Logs / Caches ---
+*.log
+*.hprof
+.navigation/
+lint/intermediates/
+lint/generated/
+lint/outputs/
+lint/tmp/
+
+# --- Outils IA ---
 .aider*
+.cursor/
+.claude/
