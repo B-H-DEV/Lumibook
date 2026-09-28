@@ -135,7 +135,7 @@ fun ReaderTopBar(
                         Text(
                             text = "Les Luminautes",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 19.sp,
+                            fontSize = 17.sp,
                             color = readerColors.textPrimary,
                             fontFamily = FontFamily.Serif,
                             maxLines = 1,
@@ -143,7 +143,7 @@ fun ReaderTopBar(
                         )
                         Text(
                             text = "La Voie de Lumière",
-                            fontSize = 13.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
                             color = readerColors.accent,
                             maxLines = 1,
