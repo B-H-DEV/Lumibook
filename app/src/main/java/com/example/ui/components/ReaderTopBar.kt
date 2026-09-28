@@ -90,6 +90,11 @@ fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                // Left: Logo (stays at far left)
+                LumibookLogoBadge(size = 40.dp)
+
+                Spacer(modifier = Modifier.width(8.dp))
+
                 // Left: Compact Original Printable PDF Download Button
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -118,7 +123,7 @@ fun ReaderTopBar(
                     )
                 }
 
-                // Center: Logo and Book Title (enlarged, centered)
+                // Center: Book Title (enlarged, centered)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
@@ -126,8 +131,6 @@ fun ReaderTopBar(
                         .weight(1f)
                         .clickable { onOpenTableOfContents() }
                 ) {
-                    LumibookLogoBadge(size = 40.dp)
-                    Spacer(modifier = Modifier.width(10.dp))
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "Les Luminautes",
