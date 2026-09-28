@@ -28,19 +28,47 @@ L'application est pensée dans un esprit de sobriété numérique : elle n'exige
   - **Clair Épuré** (fond ivoire doux `#F8FAFC`)
   - **Sépia Chaleureux** (ton parchemin reposant `#FBF0D9`)
 - **Taille de police ajustable** avec mise à l'échelle typographique fluide (sans déformation).
-- **Mémorisation automatique** de la dernière page lue, du volume et du préréglage musical.
+- **Mémorisation automatique** de la dernière page lue, du volume, du préréglage musical, du mode d'ambiance actif et de la position de lecture de chaque piste Soundscape.
 
 ### 🎙️ Narration Vocale & Synchronisation Mot à Mot
 - **Double moteur audio** : Voix studio naturelles embarquées ou moteur Text-To-Speech (TTS) natif Android.
 - **Mise en valeur visuelle synchrone** : Le mot et le paragraphe en cours de lecture sont surlignés en temps réel avec défilement automatique doux et centré.
 - **Vitesse de lecture paramétrable** (0.75x, 1.0x, 1.25x, 1.5x) sans distorsion de pitch.
 
-### 🧘 Relax-Box Intégrée (Générateur Sonore & Visuel Méditatif)
+### 🎧 Ambiances Sonores : Deux Moteurs au Choix
+
+Lumibook propose **deux moteurs d'ambiance sonore complémentaires**, sélectionnables à tout moment depuis la barre de lecture. Un seul moteur est actif à la fois pour garantir une expérience audio propre et sans conflit.
+
+#### 🌌 Relax-Box — Générateur Sonore & Visuel Méditatif
 - **Synthèse sonore procédurale 100% locale** : Générée via la Web Audio API (oscillateurs, générateurs de bruit blanc/rose/brun, filtres biquad, battements binauraux, carillons et bols tibétains).
 - **Zéro streaming, zéro fichier audio externe lourd** : L'environnement sonore est synthétisé en temps réel sans nécessiter de connexion.
+- **34 pistes génératives** réparties en 5 familles : Nature & Vie, Atmosphères, Fréquences (battements binauraux), Mélodies et Textures.
+- **Modes Auto-Shuffle intelligents** : Global, Sleep, Focus et Zen — le mixage évolue automatiquement toutes les 30 secondes.
+- **Presets pré-définis et personnalisables** : 4 scènes optimisées (Sommeil profond, Forêt nocturne, Focus Alpha, Theta Dreams) + 4 slots de sauvegarde utilisateur (C1–C4).
+- **Réglages globaux** : Mode Lo-Fi (Off / Soft / Deep), taille de l'espace (reverb), filtre Doux/Clair, minuteur de sommeil (0–120 min avec fondu progressif).
 - **Visualisations génératives animées** : Mandalas sacrés, aurores polaires, particules flottantes et plexus interactif en Canvas HTML5.
 - **Mode Plein Écran & Immersion** : Affichage épuré pour les séances de relaxation, respiration guidée et méditation.
 - **Contrôle continu en arrière-plan** : Le paysage sonore accompagne la lecture du livre sans interruption.
+
+#### 🎵 Soundscape — Lecteur de Pistes d'Ambiance
+- **3 pistes audio Opus haute qualité** embarquées dans l'application (voyages sonores d'environ 1 heure chacune).
+- **Lecture en boucle continue** avec reprise exacte de la position sauvegardée pour chaque piste.
+- **Sélection de piste intuitive** : changez de piste à tout moment, la position de chaque piste est mémorisée individuellement.
+- **Zéro streaming** : les fichiers `.opus` sont lus directement depuis les assets locaux via `MediaPlayer`.
+- **Fondu progressif anti-pop** : démarrage, pause, reprise et changement de piste sont lissés par une rampe de volume pour éliminer tout clic ou claquement.
+
+#### 🔀 Bascule Fluide entre les Deux Moteurs
+- **Sélecteur d'ambiance** dans la barre de lecture : choisissez Relax-Box ou Soundscape en un tap.
+- **Arrêt automatique de l'autre moteur** lors du changement, avec fondu de sortie pour éviter tout chevauchement sonore.
+- **Volume unifié** : un seul curseur pilote le moteur actif, l'autre est synchronisé silencieusement pour éviter les conflits.
+- **Re-cliquer sur le mode actif l'éteint** : retour immédiat au silence complet.
+
+### 🛡️ Stabilité Audio & Anti-Pop
+- **Fondu de volume systématique** (fade-in / fade-out) sur toutes les transitions : démarrage, pause, reprise, changement de piste ou de preset.
+- **Watchdog audio** : vérification périodique de l'état du moteur sonore avec reconstruction automatique en cas de défaillance.
+- **Récupération après crash** : si le processus de rendu WebView est interrompu, la lecture reprend automatiquement au preset précédent.
+- **Scheduler anti-burst** : limitation du nombre d'événements génératifs par cycle pour éviter toute saturation CPU et tout craquement audio.
+- **Suppression des offsets DC** dans les buffers de bruit et blocage DC en sortie master pour des boucles parfaitement silencieuses.
 
 ### 📄 Export & Partage du PDF Officiel
 - Fichier PDF haute définition inclus directement dans l'application (`assets/pdf/`).
@@ -68,6 +96,7 @@ Lumibook respecte scrupuleusement la souveraineté numérique de ses utilisateur
 - **UI Toolkit** : Jetpack Compose avec Material Design 3
 - **Architecture** : Clean MVVM / Unidirectional Data Flow avec Kotlin `StateFlow` & Coroutines
 - **Moteur Relax-Box** : Sandbox WebView Android locale (`file:///android_asset/relax-box/index.html`) avec pont bidirectionnel sécurisé `@JavascriptInterface`
+- **Lecteur Soundscape** : Android `MediaPlayer` pour la lecture des pistes Opus locales (`assets/soundscape/*.opus`) avec rampes de volume anti-pop
 - **Audiobook Player** : Android `MediaPlayer` pour l'audio local combiné à `android.speech.tts.TextToSpeech`
 - **Stockage Local** : `SharedPreferences` sécurisées pour la sauvegarde de progression
 - **Métadonnées Fastlane** : Disponibles dans `fastlane/metadata/android/` (fr-FR et en-US)
