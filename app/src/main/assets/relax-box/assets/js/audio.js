@@ -85,10 +85,12 @@ export class AudioEngine {
                 event.nextTime = now;
             }
 
-            // Garde-fou supplémentaire : on limite le nombre d'événements planifiés
-            // par tick pour éviter toute boucle explosive si un generate() retourne 0.
+            // ANTI-BURST RENFORCÉ : on limite à 4 événements par tick et par piste.
+            // Avant, un retard important pouvait déclencher jusqu'à 64 notes d'un coup
+            // (=> saturation CPU + burst audio = pops). On préfère "sauter" les notes
+            // manquées plutôt que de les rattraper.
             let safety = 0;
-            while (event.nextTime < now + this.lookahead && safety < 64) {
+            while (event.nextTime < now + this.lookahead && safety < 4) {
                 const master = this.soundNodes[event.id];
                 const isMuted = !master || master.userVolume <= 0.001;
 
@@ -97,6 +99,12 @@ export class AudioEngine {
                 if (!(delayInSeconds > 0)) delayInSeconds = 0.1;
                 event.nextTime += delayInSeconds;
                 safety++;
+            }
+
+            // Si on a atteint la limite, on resynchronise pour ne pas accumuler
+            // un retard qui provoquerait un burst au tick suivant.
+            if (safety >= 4 && event.nextTime < now) {
+                event.nextTime = now + 0.05;
             }
         });
     }
@@ -137,8 +145,12 @@ export class AudioEngine {
         this.compressor.ratio.value = 12;
 
         // Master (initialisé à mi-hauteur 50%)
+        // ANTI-POP : on démarre à 0 et on fade-in doucement pour éviter tout clic au resume()
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = 0.5;
+        this.masterGain.gain.value = 0.0;
+        // ANTI-CONFLIT : on mémorise la valeur cible pour getVolume().
+        this.masterGain.gain.__targetVolume = 0.5;
+        this.masterGain.gain.setTargetAtTime(0.5, this.ctx.currentTime, 0.05);
 
         // --- BUS DE RÉVERBÉRATION ---
         this.reverbNode = this.ctx.createConvolver();
@@ -160,13 +172,21 @@ export class AudioEngine {
         this.lofiLowFilter.type = 'highpass';
         this.lofiLowFilter.frequency.value = 20; // neutre ~ inaudible
 
-        // Chaîne : Comp -> Tone -> Master -> Analyser -> Destination
+        // ANTI-POP : DC blocker en sortie master. Les buffers de bruit (brown/pink)
+        // peuvent avoir un offset DC résiduel qui provoque un "pop" à chaque boucle.
+        this.dcBlocker = this.ctx.createBiquadFilter();
+        this.dcBlocker.type = 'highpass';
+        this.dcBlocker.frequency.value = 20;
+        this.dcBlocker.Q.value = 0.7;
+
+        // Chaîne : Comp -> Tone -> LofiLow -> DCBlocker -> Master -> Analyser -> Destination
         this.analyser = this.ctx.createAnalyser();
         this.analyser.fftSize = 2048;
 
         this.compressor.connect(this.toneFilter);
         this.toneFilter.connect(this.lofiLowFilter);
-        this.lofiLowFilter.connect(this.masterGain);
+        this.lofiLowFilter.connect(this.dcBlocker);
+        this.dcBlocker.connect(this.masterGain);
         this.masterGain.connect(this.analyser);
         this.analyser.connect(this.ctx.destination);
 
@@ -272,6 +292,15 @@ export class AudioEngine {
             output[i] = output[i] * alpha + output[bufferSize - fadeSamples + i] * (1 - alpha);
         }
 
+        // ANTI-POP : suppression de l'offset DC résiduel (moyenne non nulle).
+        // Un offset DC provoque un "pop" à chaque boucle du buffer.
+        let sum = 0;
+        for (let i = 0; i < bufferSize; i++) sum += output[i];
+        const dcOffset = sum / bufferSize;
+        if (Math.abs(dcOffset) > 0.0001) {
+            for (let i = 0; i < bufferSize; i++) output[i] -= dcOffset;
+        }
+
         return buffer;
     }
 
@@ -343,7 +372,8 @@ export class AudioEngine {
     }
 
     createClock(id) {
-        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        const master = this.ctx.createGain(); master.gain.value = 0.0001; master.userVolume = 0;
         this.soundNodes[id] = master; master.connect(this.compressor);
 
         const filter = this.ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 800; filter.Q.value = 2;
@@ -369,8 +399,9 @@ export class AudioEngine {
     }
 
     createBirds(id) {
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
         const master = this.ctx.createGain(); 
-        master.gain.value = 0; 
+        master.gain.value = 0.0001; 
         master.userVolume = 0;
         this.soundNodes[id] = master; 
         
@@ -417,7 +448,8 @@ export class AudioEngine {
 
 
     createOwl(id) {
-        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        const master = this.ctx.createGain(); master.gain.value = 0.0001; master.userVolume = 0;
         this.soundNodes[id] = master; 
         // NOUVEAU : Création du Panner
         const panner = this.ctx.createStereoPanner();
@@ -448,7 +480,8 @@ export class AudioEngine {
     }
 
     createHeartbeat(id) {
-        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        const master = this.ctx.createGain(); master.gain.value = 0.0001; master.userVolume = 0;
         this.soundNodes[id] = master; master.connect(this.compressor);
         this.registerGenerativeEvent(id, (t, isMuted) => {
             if (!isMuted) {
@@ -468,7 +501,8 @@ export class AudioEngine {
     }
 
     createVinylSource(id) {
-        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        const master = this.ctx.createGain(); master.gain.value = 0.0001; master.userVolume = 0;
         const hiss = this.ctx.createBufferSource(); hiss.buffer = this.buffers['pink']; hiss.loop = true;
         const hissFilter = this.ctx.createBiquadFilter(); hissFilter.type = 'highpass'; hissFilter.frequency.value = 4000;
         const hissGain = this.ctx.createGain(); hissGain.gain.value = 0.03;
@@ -492,7 +526,8 @@ export class AudioEngine {
     }
 
     createCrystalDrops(id) {
-        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        const master = this.ctx.createGain(); master.gain.value = 0.0001; master.userVolume = 0;
         this.soundNodes[id] = master; master.connect(this.compressor);
         master.connect(this.reverbNode); // Envoie le son mélodique dans la reverb
         this.registerGenerativeEvent(id, (t, isMuted) => {
@@ -509,8 +544,9 @@ export class AudioEngine {
     }
 
     createCyberNight(id) {
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
         const master = this.ctx.createGain();
-        master.gain.value = 0;
+        master.gain.value = 0.0001;
         master.userVolume = 0;
         this.soundNodes[id] = master;
 
@@ -575,7 +611,8 @@ export class AudioEngine {
     }
 
     createMelodyGenerator(id, instrumentType) {
-        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        const master = this.ctx.createGain(); master.gain.value = 0.0001; master.userVolume = 0;
         this.soundNodes[id] = master; 
         
         // Routage vers Compressor ET Reverb
@@ -714,7 +751,8 @@ export class AudioEngine {
     }
 
     createMagneticField(id) {
-        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        const master = this.ctx.createGain(); master.gain.value = 0.0001; master.userVolume = 0;
         this.soundNodes[id] = master; master.connect(this.compressor);
         master.connect(this.reverbNode);
         const osc = this.ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 60;
@@ -724,12 +762,18 @@ export class AudioEngine {
         const filter = this.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 200;
         // ANTI-ARTEFACT : on borne la fréquence du filtre entre 60 et 340 Hz
         // pour éviter qu'elle ne devienne négative (ce qui crée des clics).
+        // On ajoute un offset DC de 200Hz pour que le LFO module AUTOUR de 200Hz
+        // (200 ± 80 => 120..280 Hz) au lieu de partir de 0.
+        const lfoOffset = this.ctx.createConstantSource();
+        lfoOffset.offset.value = 200;
+        lfoOffset.connect(filter.frequency);
         lfo.connect(lfoG); lfoG.connect(filter.frequency);
         osc.connect(filter); osc2.connect(filter); filter.connect(master);
-        osc.start(); osc2.start(); lfo.start();
+        osc.start(); osc2.start(); lfo.start(); lfoOffset.start();
     }
     createCricketsHigh(id) {
-        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        const master = this.ctx.createGain(); master.gain.value = 0.0001; master.userVolume = 0;
         const src = this.ctx.createBufferSource(); src.buffer = this.buffers['white']; src.loop = true;
         const filter = this.ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 5500; filter.Q.value = 8;
         const tremolo = this.ctx.createOscillator(); tremolo.frequency.value = 30; tremolo.type = 'triangle';
@@ -739,8 +783,12 @@ export class AudioEngine {
         src.connect(filter); filter.connect(modGain); modGain.connect(master);
         // ANTI-DISTORSION : on module AUTOUR de 0.4 (offset) au lieu de partir de 0,
         // sinon le gain peut devenir négatif et créer des artefacts/clics.
+        // On ajoute un ConstantSource pour garantir un offset positif.
+        const modOffset = this.ctx.createConstantSource();
+        modOffset.offset.value = 0.4;
+        modOffset.connect(modGain.gain);
         tremolo.connect(tremoloGain); tremoloGain.connect(modGain.gain);
-        src.start(); tremolo.start();
+        src.start(); tremolo.start(); modOffset.start();
         this.soundNodes[id] = master; master.connect(this.compressor);
         const reverbSend = this.ctx.createGain();
         reverbSend.gain.value = 0.5;
@@ -748,7 +796,8 @@ export class AudioEngine {
         reverbSend.connect(this.reverbNode);
     }
     createPurrGrainy(id) {
-        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        const master = this.ctx.createGain(); master.gain.value = 0.0001; master.userVolume = 0;
         const src = this.ctx.createBufferSource(); src.buffer = this.buffers['pink']; src.loop = true;
         const filter = this.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 250; 
         const grainOsc = this.ctx.createOscillator(); grainOsc.type = 'sawtooth'; grainOsc.frequency.value = 26; 
@@ -768,8 +817,9 @@ export class AudioEngine {
     }
     createSingingBowl(id, freq) {
         // Le gain contrôlé par l'utilisateur
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
         const gain = this.ctx.createGain(); 
-        gain.gain.value = 0; 
+        gain.gain.value = 0.0001; 
         gain.userVolume = 0;
         
         // NOUVEAU : Un réducteur global (On divise la puissance du bol par 4 pour l'intégrer au mix)
@@ -816,7 +866,9 @@ export class AudioEngine {
         if(filterType === 'bandpass') filter.Q.value = 0.5;
         
         const preGain = this.ctx.createGain(); preGain.gain.value = gainBoost;
-        const gain = this.ctx.createGain(); gain.gain.value = 0; gain.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement, sinon setTargetAtTime
+        // met une éternité à décoller à cause de la courbe exponentielle).
+        const gain = this.ctx.createGain(); gain.gain.value = 0.0001; gain.userVolume = 0;
         
         // NOUVEAU : Spatialisation lente
         const panner = this.ctx.createStereoPanner();
@@ -862,12 +914,13 @@ export class AudioEngine {
 
     createDroneSource(id, baseFreq, beatFreq) {
         const gain = this.ctx.createGain(); 
-        gain.gain.value = 0; 
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        gain.gain.value = 0.0001; 
         gain.userVolume = 0;
         
         // ANTI-POP : fade-in très court au démarrage pour éviter le clic
         const now = this.ctx.currentTime;
-        gain.gain.setValueAtTime(0, now);
+        gain.gain.setValueAtTime(0.0001, now);
         
         // NOUVEAU : Création d'un "Splitter" (Séparateur stéréo)
         const merger = this.ctx.createChannelMerger(2);
@@ -914,8 +967,9 @@ export class AudioEngine {
         const reducer = this.ctx.createGain();
         reducer.gain.value = maxVol; 
         
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
         const gain = this.ctx.createGain(); 
-        gain.gain.value = 0; 
+        gain.gain.value = 0.0001; 
         gain.userVolume = 0;
         
         osc.connect(reducer); 
@@ -944,8 +998,9 @@ export class AudioEngine {
         const lfoGain = this.ctx.createGain();
         lfoGain.gain.value = 300;
 
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
         const gain = this.ctx.createGain();
-        gain.gain.value = 0;
+        gain.gain.value = 0.0001;
         gain.userVolume = 0;
 
         // ROUTAGE : osc -> filter -> padGain -> gain(master)
@@ -965,8 +1020,9 @@ export class AudioEngine {
         this.soundNodes[id] = gain;
     }
     createChoir(id) {
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
         const master = this.ctx.createGain();
-        master.gain.value = 0;
+        master.gain.value = 0.0001;
         master.userVolume = 0;
 
         const osc = this.ctx.createOscillator();
@@ -1010,8 +1066,9 @@ export class AudioEngine {
         master.connect(this.reverbNode);
     }
     createStrings(id) {
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
         const master = this.ctx.createGain();
-        master.gain.value = 0;
+        master.gain.value = 0.0001;
         master.userVolume = 0;
 
         // NOUVEAU : On ajoute un gain global très faible pour la piste entière
@@ -1051,7 +1108,8 @@ export class AudioEngine {
         const reducer = this.ctx.createGain();
         reducer.gain.value = 0.15; 
         
-        const master = this.ctx.createGain(); master.gain.value = 0; master.userVolume = 0;
+        // ANTI-POP : on démarre à 0.0001 (jamais 0 exactement).
+        const master = this.ctx.createGain(); master.gain.value = 0.0001; master.userVolume = 0;
         
         // Le filtre passe d'abord par le réducteur avant d'aller dans le master
         src.connect(filter); 
@@ -1064,7 +1122,9 @@ export class AudioEngine {
     }
     setVolume(id, val) {
         if(this.soundNodes[id]) {
-            this.soundNodes[id].gain.setTargetAtTime(val, this.ctx.currentTime, 0.2);
+            // ANTI-POP : time constant plus long (0.05s) pour lisser les transitions
+            // rapides (ex: sliders de l'auto-shuffle qui bougent à 20fps).
+            this.soundNodes[id].gain.setTargetAtTime(val, this.ctx.currentTime, 0.05);
             this.soundNodes[id].userVolume = val;
         }
     }

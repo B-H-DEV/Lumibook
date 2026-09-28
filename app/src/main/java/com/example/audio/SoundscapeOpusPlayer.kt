@@ -53,8 +53,10 @@ class SoundscapeOpusPlayer(private val context: Context) {
     // ajustant le volume par petits pas toutes les ~20ms.
     private val fadeHandler = Handler(Looper.getMainLooper())
     private var fadeRunnable: Runnable? = null
-    private val fadeSteps = 12
-    private val fadeStepDelayMs = 20L
+    // ANTI-POP : fade-in plus long (20 pas × 25ms = 500ms) pour un démarrage
+    // vraiment progressif, notamment au tout premier lancement d'une piste Opus.
+    private val fadeSteps = 20
+    private val fadeStepDelayMs = 25L
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying = _isPlaying.asStateFlow()
@@ -125,8 +127,13 @@ class SoundscapeOpusPlayer(private val context: Context) {
                         }
                     }
                     _isPlaying.value = true
-                    // ANTI-POP : fade-in progressif de 0 vers le volume cible.
-                    fadeVolumeTo(vol, fadeIn = true)
+                    // ANTI-POP : on attend que le décodeur Opus soit vraiment stable
+                    // avant de lancer le fade-in. Au tout premier start(), le décodeur
+                    // a besoin de ~150ms pour remplir son buffer ; si on monte le volume
+                    // trop tôt, on entend les artefacts de décodage (pops).
+                    fadeHandler.postDelayed({
+                        fadeVolumeTo(vol, fadeIn = true)
+                    }, 150L)
                 }
             } catch (e: Exception) {
                 Log.e("SoundscapeOpusPlayer", "Erreur lors de la lecture de ${track.fileName}: ${e.message}", e)
@@ -244,11 +251,14 @@ class SoundscapeOpusPlayer(private val context: Context) {
     fun resume() {
         try {
             mediaPlayer?.let { mp ->
-                // ANTI-POP : on démarre à volume 0 puis on fade-in.
+                // ANTI-POP : on démarre à volume 0 puis on fade-in après un court
+                // délai pour laisser le décodeur se stabiliser.
                 mp.setVolume(0f, 0f)
                 mp.start()
                 _isPlaying.value = true
-                fadeVolumeTo(_volume.value, fadeIn = true)
+                fadeHandler.postDelayed({
+                    fadeVolumeTo(_volume.value, fadeIn = true)
+                }, 100L)
                 return
             }
         } catch (e: Exception) {
@@ -306,6 +316,15 @@ class SoundscapeOpusPlayer(private val context: Context) {
             } catch (ignored: Exception) {
             }
         }
+    }
+
+    /**
+     * ANTI-POP : applique un volume cible SANS déclencher de rampe.
+     * Utilisé quand on veut juste synchroniser le volume interne sans
+     * perturber une lecture en cours.
+     */
+    fun syncVolumeOnly(vol: Float) {
+        _volume.value = vol.coerceIn(0f, 1f)
     }
 
     fun getCurrentPosition(): Int {

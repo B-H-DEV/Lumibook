@@ -118,16 +118,33 @@ const app = {
     applyPresetObject: function(preset, startFromZero = false) {
         if (!preset) return;
 
-        // 1) Reset doux (volumes à 0) - sauf si startFromZero est false (on garde la position actuelle)
-        if (startFromZero) {
-            this.tracks.forEach(t => this.updateSlider(t.id, 0));
-        }
+        // ANTI-POP : on coupe le master en douceur avant de tout remettre à zéro,
+        // puis on le remonte après. Sinon, un reset massif de sliders crée un clac.
+        const audio = this.audio;
+        const applyAll = () => {
+            // 1) Reset doux (volumes à 0) - sauf si startFromZero est false (on garde la position actuelle)
+            if (startFromZero) {
+                this.tracks.forEach(t => this.updateSlider(t.id, 0));
+            }
 
-        // 2) Appliquer les volumes
-        if (Array.isArray(preset.tracks)) {
-            preset.tracks.forEach(s => {
-                this.updateSlider(s.id, s.val);
-            });
+            // 2) Appliquer les volumes
+            if (Array.isArray(preset.tracks)) {
+                preset.tracks.forEach(s => {
+                    this.updateSlider(s.id, s.val);
+                });
+            }
+
+            // ANTI-POP : on remonte le master en douceur après l'application.
+            if (audio && audio.fadeMasterIn) {
+                audio.fadeMasterIn(0.4);
+            }
+        };
+
+        if (audio && audio.fadeMasterOut) {
+            audio.fadeMasterOut(0.15);
+            setTimeout(applyAll, 180);
+        } else {
+            applyAll();
         }
 
         // 3) Reverb globale
@@ -284,22 +301,41 @@ const app = {
             // Si global ou zen, on ne touche pas au lofi de l'utilisateur
         }
 
-        // 4. Mettre tous les sliders à 0 pour un démarrage complètement aléatoire
-        this.tracks.forEach(track => {
-            this.updateSlider(track.id, 0);
-        });
+        // ANTI-POP : quand on change d'ensemble de pistes, on coupe d'abord le
+        // master en douceur. Sinon, mettre 30+ sliders à 0 d'un coup crée un
+        // "clac" collectif (toutes les rampes setTargetAtTime partent en même temps).
+        const audio = this.audio;
+        const doReset = () => {
+            // 4. Mettre tous les sliders à 0 pour un démarrage complètement aléatoire
+            this.tracks.forEach(track => {
+                this.updateSlider(track.id, 0);
+            });
 
-        // 5. Générer les cibles vers lesquelles les sliders vont glisser (en partant de zéro)
-        this.generateShuffleTargets();
-        
-        // 6. Lancer la boucle d'intervalle et l'animation
-        // Nettoyer d'abord si on relançait par-dessus un autre mode
-        if (this.autoShuffleInterval) clearInterval(this.autoShuffleInterval);
-        this.autoShuffleInterval = setInterval(() => { this.generateShuffleTargets(); }, 30000);
-        
-        // Lancer l'animation visuelle
-        this.animateSliders();
-        
+            // 5. Générer les cibles vers lesquelles les sliders vont glisser (en partant de zéro)
+            this.generateShuffleTargets();
+
+            // 6. Lancer la boucle d'intervalle et l'animation
+            // Nettoyer d'abord si on relançait par-dessus un autre mode
+            if (this.autoShuffleInterval) clearInterval(this.autoShuffleInterval);
+            this.autoShuffleInterval = setInterval(() => { this.generateShuffleTargets(); }, 30000);
+
+            // Lancer l'animation visuelle
+            this.animateSliders();
+
+            // ANTI-POP : on remonte le master en douceur après le reset.
+            if (audio && audio.fadeMasterIn) {
+                audio.fadeMasterIn(0.4);
+            }
+        };
+
+        if (audio && audio.fadeMasterOut) {
+            // Fade-out court (150ms) puis reset + fade-in
+            audio.fadeMasterOut(0.15);
+            setTimeout(doReset, 180);
+        } else {
+            doReset();
+        }
+
         // 7. Mettre à jour le bouton Auto-Shuffle visuellement
         const btn = document.getElementById('autoShuffleBtn');
         if (btn) {
@@ -1729,8 +1765,15 @@ window.LumibookBridge = {
         const v = Math.max(0.0, Math.min(1.0, parseFloat(volume) || 0.0));
         if (window.app && window.app.audio && window.app.audio.masterGain && window.app.audio.ctx) {
             try {
-                window.app.audio.masterGain.gain.cancelScheduledValues(window.app.audio.ctx.currentTime);
-                window.app.audio.masterGain.gain.setValueAtTime(v, window.app.audio.ctx.currentTime);
+                // ANTI-POP : setTargetAtTime au lieu de setValueAtTime.
+                // Un saut instantané de gain = clic. On lisse sur 50ms.
+                const now = window.app.audio.ctx.currentTime;
+                const g = window.app.audio.masterGain.gain;
+                g.cancelScheduledValues(now);
+                g.setTargetAtTime(v, now, 0.05);
+                // ANTI-CONFLIT : on mémorise la valeur CIBLE pour que getVolume()
+                // retourne la bonne valeur même pendant la rampe.
+                g.__targetVolume = v;
             } catch (e) {
                 window.app.audio.masterGain.gain.value = v;
             }
@@ -1780,7 +1823,14 @@ window.LumibookBridge = {
     },
     getVolume: function() {
         if (window.app && window.app.audio && window.app.audio.masterGain) {
-            return window.app.audio.masterGain.gain.value;
+            // ANTI-CONFLIT : on retourne la valeur CIBLE (celle que l'utilisateur
+            // a demandée), pas la valeur instantanée du gain (qui est en train
+            // de ramper). Sinon le slider Android "saute" pendant les rampes.
+            const g = window.app.audio.masterGain.gain;
+            if (g.__targetVolume !== undefined) {
+                return g.__targetVolume;
+            }
+            return g.value;
         }
         return 0.5;
     },

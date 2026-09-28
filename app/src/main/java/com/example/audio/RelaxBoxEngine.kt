@@ -189,6 +189,15 @@ class RelaxBoxEngine(private val context: Context) {
         }
     }
 
+    /**
+     * ANTI-POP : applique un volume cible SANS envoyer d'ordre au WebView.
+     * Utilisé pour synchroniser l'état interne quand c'est Soundscape qui
+     * pilote le volume, afin d'éviter que les deux moteurs se battent.
+     */
+    fun syncVolumeOnly(vol: Float) {
+        _volume.value = vol.coerceIn(0f, 1f)
+    }
+
     fun setAutoMode(mode: String) {
         val m = mode.lowercase()
         _currentPreset.value = m

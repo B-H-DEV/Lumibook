@@ -292,8 +292,27 @@ class MainActivity : ComponentActivity() {
                                 },
                                 musicVolume = musicVolume,
                                 onMusicVolumeChange = { vol ->
-                                    relaxEngine.setVolume(vol)
-                                    soundscapePlayer.setVolume(vol)
+                                    // ANTI-CONFLIT : on applique le volume au moteur
+                                    // actuellement actif, et on synchronise seulement
+                                    // l'état interne de l'autre (sans lui envoyer d'ordre)
+                                    // pour éviter que les deux callbacks se battent et
+                                    // fassent "sauter" le curseur.
+                                    when (ambianceModeState) {
+                                        AmbianceMode.SOUNDSCAPE -> {
+                                            soundscapePlayer.setVolume(vol)
+                                            relaxEngine.syncVolumeOnly(vol)
+                                        }
+                                        AmbianceMode.RELAX_BOX -> {
+                                            relaxEngine.setVolume(vol)
+                                            soundscapePlayer.syncVolumeOnly(vol)
+                                        }
+                                        AmbianceMode.NONE -> {
+                                            // Aucun moteur actif : on synchronise juste
+                                            // les deux états internes sans jouer de son.
+                                            relaxEngine.syncVolumeOnly(vol)
+                                            soundscapePlayer.syncVolumeOnly(vol)
+                                        }
+                                    }
                                 },
                                 currentPreset = currentPreset,
                                 onSelectPreset = { preset ->
