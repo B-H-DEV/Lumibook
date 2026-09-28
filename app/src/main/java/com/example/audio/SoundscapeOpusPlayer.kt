@@ -3,6 +3,8 @@ package com.example.audio
 import android.content.Context
 import android.content.res.AssetFileDescriptor
 import android.media.MediaPlayer
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +47,14 @@ class SoundscapeOpusPlayer(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Main)
     private var prepareJob: Job? = null
     private var mediaPlayer: MediaPlayer? = null
+
+    // ANTI-POP : Handler dédié aux rampes de volume (fade-in / fade-out).
+    // MediaPlayer n'a pas de rampe native, on simule donc une rampe en
+    // ajustant le volume par petits pas toutes les ~20ms.
+    private val fadeHandler = Handler(Looper.getMainLooper())
+    private var fadeRunnable: Runnable? = null
+    private val fadeSteps = 12
+    private val fadeStepDelayMs = 20L
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying = _isPlaying.asStateFlow()
@@ -97,17 +107,26 @@ class SoundscapeOpusPlayer(private val context: Context) {
                     setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                     afd.close()
                     isLooping = true // Boucle infinie continue
-                    setVolume(vol, vol)
+                    // ANTI-POP : on démarre à volume 0, le fade-in s'occupe de monter.
+                    setVolume(0f, 0f)
                     prepare() // Executed off UI main thread
-                    // Restaurer la position sauvegardée
-                    if (savedPosition > 0) {
-                        seekTo(savedPosition)
-                    }
                 }
                 withContext(Dispatchers.Main) {
                     mediaPlayer = mp
+                    // ANTI-POP : on démarre d'abord, PUIS on seek.
+                    // Un seekTo() avant start() peut laisser le décodeur dans un
+                    // état transitoire (première frame incomplète) => pop.
                     mp.start()
+                    if (savedPosition > 0) {
+                        try {
+                            mp.seekTo(savedPosition)
+                        } catch (e: Exception) {
+                            Log.w("SoundscapeOpusPlayer", "seekTo($savedPosition) échoué: ${e.message}")
+                        }
+                    }
                     _isPlaying.value = true
+                    // ANTI-POP : fade-in progressif de 0 vers le volume cible.
+                    fadeVolumeTo(vol, fadeIn = true)
                 }
             } catch (e: Exception) {
                 Log.e("SoundscapeOpusPlayer", "Erreur lors de la lecture de ${track.fileName}: ${e.message}", e)
@@ -116,6 +135,90 @@ class SoundscapeOpusPlayer(private val context: Context) {
                 }
             }
         }
+    }
+
+    /**
+     * ANTI-POP : rampe de volume progressive.
+     * MediaPlayer n'a pas de rampe native, on simule donc une rampe linéaire
+     * en ajustant le volume par petits pas toutes les [fadeStepDelayMs] ms.
+     * Cela évite les clics de démarrage/arrêt brutal.
+     */
+    private fun fadeVolumeTo(target: Float, fadeIn: Boolean) {
+        // Annule toute rampe en cours
+        fadeRunnable?.let { fadeHandler.removeCallbacks(it) }
+        fadeRunnable = null
+
+        val mp = mediaPlayer ?: return
+        val clampedTarget = target.coerceIn(0f, 1f)
+        val startVol = if (fadeIn) 0f else {
+            try { _volume.value } catch (e: Exception) { 0f }
+        }
+
+        var step = 0
+        val runnable = object : Runnable {
+            override fun run() {
+                val player = mediaPlayer ?: return
+                step++
+                val progress = step.toFloat() / fadeSteps
+                val current = startVol + (clampedTarget - startVol) * progress
+                try {
+                    player.setVolume(current, current)
+                } catch (e: Exception) {
+                    return
+                }
+                if (step < fadeSteps) {
+                    fadeHandler.postDelayed(this, fadeStepDelayMs)
+                } else {
+                    fadeRunnable = null
+                }
+            }
+        }
+        fadeRunnable = runnable
+        fadeHandler.post(runnable)
+    }
+
+    /**
+     * ANTI-POP : fade-out puis exécution d'une action (pause/stop/release).
+     * On laisse le fade-out se terminer avant de couper réellement le son.
+     */
+    private fun fadeOutThen(action: () -> Unit) {
+        fadeRunnable?.let { fadeHandler.removeCallbacks(it) }
+        fadeRunnable = null
+
+        val mp = mediaPlayer
+        if (mp == null) {
+            action()
+            return
+        }
+
+        val startVol = try { _volume.value } catch (e: Exception) { 0f }
+        var step = 0
+        val runnable = object : Runnable {
+            override fun run() {
+                val player = mediaPlayer
+                if (player == null) {
+                    action()
+                    return
+                }
+                step++
+                val progress = step.toFloat() / fadeSteps
+                val current = startVol * (1f - progress)
+                try {
+                    player.setVolume(current, current)
+                } catch (e: Exception) {
+                    action()
+                    return
+                }
+                if (step < fadeSteps) {
+                    fadeHandler.postDelayed(this, fadeStepDelayMs)
+                } else {
+                    fadeRunnable = null
+                    action()
+                }
+            }
+        }
+        fadeRunnable = runnable
+        fadeHandler.post(runnable)
     }
 
     fun togglePlayPause() {
@@ -141,10 +244,11 @@ class SoundscapeOpusPlayer(private val context: Context) {
     fun resume() {
         try {
             mediaPlayer?.let { mp ->
-                val vol = _volume.value
-                mp.setVolume(vol, vol)
+                // ANTI-POP : on démarre à volume 0 puis on fade-in.
+                mp.setVolume(0f, 0f)
                 mp.start()
                 _isPlaying.value = true
+                fadeVolumeTo(_volume.value, fadeIn = true)
                 return
             }
         } catch (e: Exception) {
@@ -156,24 +260,33 @@ class SoundscapeOpusPlayer(private val context: Context) {
     fun pause() {
         _isPlaying.value = false
         prepareJob?.cancel()
-        try {
-            if (mediaPlayer?.isPlaying == true) {
-                // Sauvegarder la position actuelle avant de mettre en pause
-                val currentPosition = mediaPlayer?.currentPosition ?: 0
-                trackPositions[_currentTrackIndex.value] = currentPosition
-                mediaPlayer?.pause()
+        // ANTI-POP : fade-out avant de mettre en pause pour éviter le clic.
+        fadeOutThen {
+            try {
+                if (mediaPlayer?.isPlaying == true) {
+                    // Sauvegarder la position actuelle avant de mettre en pause
+                    val currentPosition = mediaPlayer?.currentPosition ?: 0
+                    trackPositions[_currentTrackIndex.value] = currentPosition
+                    mediaPlayer?.pause()
+                }
+            } catch (ignored: Exception) {
             }
-        } catch (ignored: Exception) {
         }
     }
 
     fun stop() {
         _isPlaying.value = false
         prepareJob?.cancel()
-        stopCurrentPlayer()
+        // ANTI-POP : fade-out avant de stopper/release.
+        fadeOutThen {
+            stopCurrentPlayer()
+        }
     }
 
     private fun stopCurrentPlayer() {
+        // Annule toute rampe en cours avant de libérer le player.
+        fadeRunnable?.let { fadeHandler.removeCallbacks(it) }
+        fadeRunnable = null
         try {
             mediaPlayer?.stop()
             mediaPlayer?.release()
@@ -185,9 +298,13 @@ class SoundscapeOpusPlayer(private val context: Context) {
     fun setVolume(vol: Float) {
         val clamped = vol.coerceIn(0f, 1f)
         _volume.value = clamped
-        try {
-            mediaPlayer?.setVolume(clamped, clamped)
-        } catch (ignored: Exception) {
+        // ANTI-POP : si une rampe est en cours, on la laisse finir (elle cible
+        // déjà le bon volume). Sinon on applique directement.
+        if (fadeRunnable == null) {
+            try {
+                mediaPlayer?.setVolume(clamped, clamped)
+            } catch (ignored: Exception) {
+            }
         }
     }
 
@@ -212,6 +329,9 @@ class SoundscapeOpusPlayer(private val context: Context) {
     }
 
     fun release() {
+        // ANTI-POP : on annule toute rampe en cours avant de libérer.
+        fadeRunnable?.let { fadeHandler.removeCallbacks(it) }
+        fadeRunnable = null
         stop()
     }
 }
