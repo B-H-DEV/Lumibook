@@ -48,6 +48,14 @@ class RelaxBoxEngine(private val context: Context) {
     private var pendingPlayAfterReady = false
     private var pendingPresetAfterReady: String? = null
 
+    // ANTI-CRASH : watchdog qui vérifie périodiquement que le moteur audio JS
+    // est toujours vivant. Si le render process WebView a crashé ou si
+    // l'AudioContext est fermé, on tente une reconstruction automatique.
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private var watchdogRunnable: Runnable? = null
+    private var wasPlayingBeforeCrash = false
+    private var lastPresetBeforeCrash: String = "global"
+
     init {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             initWebView()
@@ -92,6 +100,17 @@ class RelaxBoxEngine(private val context: Context) {
                         Log.d("RelaxBoxEngine", "Relax-Box loaded successfully")
                         setVolume(_volume.value)
 
+                        // ANTI-CRASH : si le WebView a crashé alors qu'on jouait,
+                        // on relance automatiquement la lecture.
+                        if (wasPlayingBeforeCrash) {
+                            wasPlayingBeforeCrash = false
+                            Log.d("RelaxBoxEngine", "Restoring playback after crash with preset=$lastPresetBeforeCrash")
+                            mainHandler.postDelayed({
+                                loadPreset(lastPresetBeforeCrash)
+                            }, 500)
+                            return
+                        }
+
                         if (pendingPlayAfterReady) {
                             pendingPlayAfterReady = false
                             val preset = pendingPresetAfterReady ?: _currentPreset.value
@@ -101,6 +120,10 @@ class RelaxBoxEngine(private val context: Context) {
 
                     override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                         Log.w("RelaxBoxEngine", "WebView render process gone (crashed=${detail?.didCrash()}). Recovering...")
+                        // ANTI-CRASH : on mémorise l'état de lecture pour le restaurer
+                        // automatiquement après la reconstruction du WebView.
+                        wasPlayingBeforeCrash = _isPlaying.value
+                        lastPresetBeforeCrash = _currentPreset.value
                         try {
                             (webView?.parent as? ViewGroup)?.removeView(webView)
                             webView?.destroy()
@@ -146,6 +169,37 @@ class RelaxBoxEngine(private val context: Context) {
 
     fun getWebView(): WebView? = webView
 
+    /**
+     * ANTI-CRASH : démarre le watchdog qui vérifie toutes les 15 secondes que
+     * le moteur audio JS est toujours vivant. Si ce n'est pas le cas, on
+     * demande au JS de se reconstruire (hardReset).
+     */
+    private fun startWatchdog() {
+        stopWatchdog()
+        val runnable = object : Runnable {
+            override fun run() {
+                if (isEngineReady && _isPlaying.value) {
+                    try {
+                        webView?.evaluateJavascript(
+                            "(async () => { if (window.LumibookBridge && window.LumibookBridge.ensureAudioAlive) { await window.LumibookBridge.ensureAudioAlive(); } })();",
+                            null
+                        )
+                    } catch (e: Exception) {
+                        Log.w("RelaxBoxEngine", "Watchdog check failed: ${e.message}")
+                    }
+                }
+                watchdogHandler.postDelayed(this, 15000L)
+            }
+        }
+        watchdogRunnable = runnable
+        watchdogHandler.postDelayed(runnable, 15000L)
+    }
+
+    private fun stopWatchdog() {
+        watchdogRunnable?.let { watchdogHandler.removeCallbacks(it) }
+        watchdogRunnable = null
+    }
+
     fun togglePlayPause() {
         if (_isPlaying.value) {
             pause()
@@ -166,9 +220,11 @@ class RelaxBoxEngine(private val context: Context) {
             )
         }
         _isPlaying.value = true
+        startWatchdog()
     }
 
     fun pause() {
+        stopWatchdog()
         mainHandler.post {
             webView?.evaluateJavascript(
                 "if (window.LumibookBridge) { window.LumibookBridge.pause(); }",
@@ -213,6 +269,7 @@ class RelaxBoxEngine(private val context: Context) {
             )
         }
         _isPlaying.value = true
+        startWatchdog()
     }
 
     fun loadPreset(presetId: String) {
@@ -234,6 +291,7 @@ class RelaxBoxEngine(private val context: Context) {
             )
         }
         _isPlaying.value = true
+        startWatchdog()
     }
 
     fun openFullScreen() {
@@ -273,6 +331,7 @@ class RelaxBoxEngine(private val context: Context) {
     }
 
     fun release() {
+        stopWatchdog()
         mainHandler.post {
             try {
                 webView?.evaluateJavascript(

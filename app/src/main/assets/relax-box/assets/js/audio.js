@@ -14,16 +14,17 @@ export class AudioEngine {
     }
 
     initSchedulerWorker() {
-        // ANTI-BURST : on resynchronise TOUJOURS les événements (même si le
-        // scheduler tourne déjà), pour ne pas rattraper le temps perdu après
-        // une suspension du AudioContext.
-        this.resyncScheduledEvents();
-
-        // Si le scheduler est déjà actif, ne rien faire de plus
+        // Si le scheduler est déjà actif, on ne resynchronise PAS les événements
+        // (sinon on ré-étale les nextTime à chaque play() et on crée des doublons
+        // de notes / des bursts). On se contente de vérifier que le contexte tourne.
         if (this.worker || this.schedulerTimer) {
-            console.log("Scheduler already active, resynced events");
+            console.log("Scheduler already active, skipping resync");
             return;
         }
+
+        // ANTI-BURST : on resynchronise les événements UNIQUEMENT quand on
+        // redémarre réellement le scheduler (après un stop ou un suspend).
+        this.resyncScheduledEvents();
         // Réactivation du Web Worker pour meilleure stabilité audio
         // Fallback vers setInterval si le Worker échoue
         try {
@@ -65,6 +66,48 @@ export class AudioEngine {
         }
     }
 
+    /**
+     * ANTI-CRASH : vérifie que le moteur audio est dans un état sain.
+     * Retourne false si le contexte est fermé ou si le scheduler est mort.
+     * Utilisé par le bridge pour décider s'il faut réinitialiser.
+     */
+    isHealthy() {
+        if (!this.ctx) return false;
+        if (this.ctx.state === 'closed') return false;
+        // Si le scheduler est censé tourner mais qu'il n'y a ni worker ni timer,
+        // c'est qu'il est mort.
+        if (!this.worker && !this.schedulerTimer) return false;
+        return true;
+    }
+
+    /**
+     * ANTI-CRASH : réinitialise complètement le moteur audio.
+     * À appeler si isHealthy() retourne false (ex: après un crash du render
+     * process WebView ou un AudioContext fermé).
+     */
+    async hardReset() {
+        console.log("AudioEngine.hardReset() - Rebuilding audio engine");
+        try {
+            this.stopScheduler();
+        } catch (e) {}
+        try {
+            if (this.ctx && this.ctx.state !== 'closed') {
+                await this.ctx.close();
+            }
+        } catch (e) {}
+        this.ctx = null;
+        this.masterGain = null;
+        this.compressor = null;
+        this.analyser = null;
+        this.soundNodes = {};
+        this.buffers = {};
+        this.scheduledEvents = [];
+        this.worker = null;
+        this.schedulerTimer = null;
+        await this.init();
+        console.log("AudioEngine.hardReset() - Done");
+    }
+
     registerGenerativeEvent(id, generateCallback, initialOffset = 0) {
         this.scheduledEvents.push({
             id: id,
@@ -74,7 +117,11 @@ export class AudioEngine {
     }
 
     processScheduledEvents() {
-        if (!this.ctx || this.ctx.state !== 'running') return;
+        // ANTI-CRASH : on vérifie que le contexte existe ET n'est pas fermé.
+        // Un AudioContext fermé (closed) ne peut plus rien jouer et ferait
+        // planter silencieusement tout le scheduler.
+        if (!this.ctx || this.ctx.state === 'closed') return;
+        if (this.ctx.state !== 'running') return;
         const now = this.ctx.currentTime;
 
         this.scheduledEvents.forEach(event => {

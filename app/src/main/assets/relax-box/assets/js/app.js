@@ -1665,6 +1665,10 @@ window.LumibookBridge = {
                 try { await bgAudio.play(); } catch (e) {}
             }
         }
+        // ANTI-POP : fade-in du master après l'initialisation complète.
+        if (window.app && window.app.audio && window.app.audio.fadeMasterIn) {
+            window.app.audio.fadeMasterIn(0.3);
+        }
         this._started = true;
         this.notifyState();
     },
@@ -1700,6 +1704,17 @@ window.LumibookBridge = {
             return;
         }
 
+        // ANTI-CRASH : si le moteur audio est dans un état invalide (contexte
+        // fermé, scheduler mort), on le reconstruit complètement avant de jouer.
+        if (this.audio && this.audio.isHealthy && !this.audio.isHealthy()) {
+            console.warn("Audio engine unhealthy, performing hard reset");
+            try {
+                await this.audio.hardReset();
+            } catch (e) {
+                console.error("hardReset failed:", e);
+            }
+        }
+
         // 1. Reprendre le AudioContext s'il est suspendu (AVANT de relancer le scheduler)
         if (this.audio && this.audio.ctx && this.audio.ctx.state === 'suspended') {
             console.log("Resuming suspended AudioContext");
@@ -1708,10 +1723,9 @@ window.LumibookBridge = {
             }
         }
 
-        // 2. Redémarrer le scheduler audio (le resume() resynchronise les événements
-        //    via resyncScheduledEvents() pour éviter tout burst audio)
+        // 2. Redémarrer le scheduler audio s'il n'est pas déjà actif
         if (this.audio && this.audio.initSchedulerWorker) {
-            console.log("Restarting audio scheduler");
+            console.log("Ensuring audio scheduler is running");
             this.audio.initSchedulerWorker();
         }
         
@@ -1742,16 +1756,24 @@ window.LumibookBridge = {
         this.notifyState();
     },
     pause: function() {
-        if (window.app && window.app.reset) {
-            window.app.reset();
+        // ANTI-POP : fade-out du master AVANT de suspendre le contexte.
+        // Sans ça, le suspend() coupe le signal en plein milieu d'une onde => clic.
+        if (window.app && window.app.audio && window.app.audio.fadeMasterOut) {
+            window.app.audio.fadeMasterOut(0.12);
         }
-        const bgAudio = document.getElementById('bg-audio');
-        if (bgAudio && !bgAudio.paused) {
-            try { bgAudio.pause(); } catch (e) {}
-        }
-        if (window.app && window.app.audio && window.app.audio.ctx && window.app.audio.ctx.state === 'running') {
-            try { window.app.audio.ctx.suspend(); } catch (e) {}
-        }
+        // On laisse le fade-out se terminer avant de couper réellement.
+        setTimeout(() => {
+            if (window.app && window.app.reset) {
+                window.app.reset();
+            }
+            const bgAudio = document.getElementById('bg-audio');
+            if (bgAudio && !bgAudio.paused) {
+                try { bgAudio.pause(); } catch (e) {}
+            }
+            if (window.app && window.app.audio && window.app.audio.ctx && window.app.audio.ctx.state === 'running') {
+                try { window.app.audio.ctx.suspend(); } catch (e) {}
+            }
+        }, 130);
         this.notifyState();
     },
     togglePlayPause: function() {
@@ -1820,6 +1842,29 @@ window.LumibookBridge = {
         const bgAudioPlaying = bgAudio && !bgAudio.paused;
         const ctxRunning = !!(window.app && window.app.audio && window.app.audio.ctx && window.app.audio.ctx.state === 'running');
         return bgAudioPlaying || ctxRunning;
+    },
+    /**
+     * ANTI-CRASH : appelé par le watchdog Kotlin pour vérifier que le moteur
+     * audio est toujours vivant. Si non, on tente une reconstruction.
+     */
+    ensureAudioAlive: async function() {
+        if (!window.app || !window.app.audio) return false;
+        const audio = window.app.audio;
+        if (audio.isHealthy && audio.isHealthy()) {
+            return true;
+        }
+        console.warn("Watchdog: audio engine unhealthy, rebuilding...");
+        try {
+            await audio.hardReset();
+            // Relancer le scheduler et le mode courant
+            if (window.app.startAutoShuffleWithMode && window.app.isAutoShuffle) {
+                window.app.startAutoShuffleWithMode(window.app.currentShuffleMode || 'global');
+            }
+            return true;
+        } catch (e) {
+            console.error("Watchdog: rebuild failed", e);
+            return false;
+        }
     },
     getVolume: function() {
         if (window.app && window.app.audio && window.app.audio.masterGain) {
